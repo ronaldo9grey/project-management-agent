@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+frontend/dist/
+backend/*.egg
+
+# Environment files (IMPORTANT: Never commit secrets)
+.env
+.env.local
+.env.*.local
+*.env
+
+# Secrets and credentials
+**/secrets/
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# Test files with sensitive data
+test_*.py
+*_test.py
+generate_test_*.py
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Backup files
+*.backup
+*.bak
+*.old
