@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 # PushPlus 配置
-PUSHPLUS_TOKEN = "1b14b8721fce4a8690611bf61af95312"
+PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN", "")
 PUSHPLUS_API = "http://www.pushplus.plus/send"
 PUSHPLUS_TOPIC = "projectalarm"  # 群组编码
 

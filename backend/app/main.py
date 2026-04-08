@@ -6900,7 +6900,7 @@ async def generate_weekly_report(
             # 使用 DeepSeek AI 生成周报摘要
             from langchain_deepseek import ChatDeepSeek
             
-            api_key = os.getenv("DEEPSEEK_API_KEY", "sk-33b75dba820d4a77879fc8b1a61d585b")
+            api_key = os.getenv("DEEPSEEK_API_KEY", "")
             
             llm = ChatDeepSeek(
                 model="deepseek-chat",
