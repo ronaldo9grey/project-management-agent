@@ -69,6 +69,7 @@ export default function DailyPage() {
   const [isLoadingHistory, setIsLoadingHistory] = useState(true)
   const [parseWarnings, setParseWarnings] = useState<ParseWarning[]>([])
   const [matchedProjects, setMatchedProjects] = useState<Array<{id: number; name: string; leader: string}>>([])
+  const [hasParsed, setHasParsed] = useState(false)  // 是否已解析（避免切换日期时重复清空）
   
   // 使用本地日期，避免 toISOString() 转为 UTC 导致日期偏差
   const now = new Date()
@@ -107,12 +108,15 @@ export default function DailyPage() {
     loadHistoryReports()
   }, [])
   
-  // 日期切换时清空解析结果
-  useEffect(() => {
-    clearDailyEntries()
-    setParseWarnings([])
-    setMatchedProjects([])
-  }, [selectedDate])
+  // 日期切换时：如果已解析则保留内容，否则清空
+  // 用户可以通过"清除"按钮手动重置
+  // useEffect(() => {
+  //   if (!hasParsed) {
+  //     clearDailyEntries()
+  //     setParseWarnings([])
+  //     setMatchedProjects([])
+  //   }
+  // }, [selectedDate, hasParsed])
 
   const loadHistoryReports = async () => {
     setIsLoadingHistory(true)
@@ -158,6 +162,9 @@ export default function DailyPage() {
         result.entries.forEach((entry: ParsedEntry) => {
           addDailyEntry(entry)
         })
+        
+        // 标记已解析（避免切换日期时清空）
+        setHasParsed(true)
         
         // 解析成功，保留输入内容（不清空）
         // setInputText('')  // 已移除：不清空输入框
@@ -247,6 +254,7 @@ export default function DailyPage() {
       clearDailyEntries()
       setParseWarnings([])
       setMatchedProjects([])
+      setHasParsed(false)  // 提交成功后重置已解析状态
       loadHistoryReports()
     } catch (error: any) {
       const errorMsg = error.response?.data?.detail || '提交失败，请重试'
@@ -372,10 +380,18 @@ export default function DailyPage() {
                   <div
                     key={d.date}
                     onClick={() => {
+                      // 如果切换到新日期且已解析，询问是否保留
+                      if (d.date !== selectedDate && hasParsed && dailyEntries.length > 0) {
+                        // 不清空，保留解析结果（用户可能想提交到新日期）
+                        // 注释掉清空逻辑，让用户自己决定
+                      }
                       setSelectedDate(d.date)
                       setShowDatePicker(false)
-                      clearDailyEntries()
-                      setParseWarnings([])
+                      // 已解析的内容不清空
+                      if (!hasParsed) {
+                        clearDailyEntries()
+                        setParseWarnings([])
+                      }
                     }}
                     style={{
                       padding: '10px 12px',
