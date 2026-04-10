@@ -3569,7 +3569,9 @@ async def submit_daily(
 # ============== 计划版本管理 API ==============
 
 @app.post("/api/agent/plans/upload/{project_id}")
+@limiter.limit("20/hour")  # 上传限流：每小时最多20次
 async def upload_plan_excel(
+    request: Request,
     project_id: int,
     file: UploadFile = File(...),
     version_name: Optional[str] = None,
@@ -5087,8 +5089,10 @@ def generate_project_context(project_id: int, engine) -> str:
 
 
 @app.post("/api/agent/chat")
+@limiter.limit("10/minute")  # AI接口限流：每分钟最多10次
 async def chat(
-    request: Dict,
+    request: Request,
+    req: Dict,
     current_user: Dict = Depends(get_current_user)
 ):
     """
