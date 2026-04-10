@@ -4,6 +4,7 @@ import MobileNav from '../components/MobileNav'
 import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store'
 import { plansApi, projectsApi } from '../api'
+import * as XLSX from 'xlsx'
 // import * as XLSX from 'xlsx' // Excel预览功能待完善
 
 interface Project {
@@ -204,10 +205,14 @@ export default function PlansPage() {
 
   // Excel预览功能
   const [previewVersion, setPreviewVersion] = useState<any>(null)
-  const [previewHtml, setPreviewHtml] = useState<string>('(')
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
   const handlePreviewExcel = async (version: any) => {
-    if (!version.file_name) return alert('该版本没有关联的Excel文件')
+    if (!version.file_name) {
+      alert('该版本没有关联的Excel文件')
+      return
+    }
     
     setPreviewVersion(version)
     setIsLoadingPreview(true)
@@ -219,15 +224,11 @@ export default function PlansPage() {
       })
       if (!res.ok) throw new Error('文件不存在')
       
-      const data = await (await res.blob()).arrayBuffer()
+      const blob = await res.blob()
+      const data = await blob.arrayBuffer()
       const wb = XLSX.read(data, { type: 'array' })
       const sheet = wb.Sheets[wb.SheetNames[0]]
-      const html = XLSX.utils.sheet_to_html(sheet, {
-        header: '<table style="border-collapse:collapse;width:100%;font-size:12px">',
-        footer: '</table>'
-      }).replace(/<td/g, '<td style="border:1px solid #e5e7eb;padding:4px 8px"')
-        .replace(/<th/g, '<th style="border:1px solid #e5e7eb;padding:4px 8px;background:#f3f4f6"')
-      
+      const html = XLSX.utils.sheet_to_html(sheet)
       setPreviewHtml(html)
     } catch (e: any) {
       alert(`预览失败: ${e.message}`)
@@ -707,6 +708,7 @@ export default function PlansPage() {
           </div>
         </div>
       )}
+
 
       {/* Excel预览模态框 */}
       {previewVersion && (
