@@ -1,0 +1,123 @@
+"""
+数据库连接池管理模块
+
+解决问题：
+1. 避免重复创建连接池
+2. 统一管理数据库连接
+3. 配置合理的连接池参数
+4. 应用关闭时正确释放资源
+"""
+
+import os
+from typing import Generator, Optional
+from contextlib import contextmanager
+from sqlalchemy import create_engine, text, Engine
+from sqlalchemy.engine import Connection
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+class DatabaseManager:
+    """数据库连接池管理器（单例模式）"""
+    
+    _instance: Optional['DatabaseManager'] = None
+    _engine: Optional[Engine] = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def get_engine(self) -> Engine:
+        """获取数据库引擎（单例）"""
+        if self._engine is None:
+            db_url = os.getenv("DATABASE_URL")
+            if not db_url:
+                # 开发环境默认值（生产环境必须设置环境变量）
+                db_url = "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking"
+                print("[Database] 警告：使用默认数据库连接，生产环境请设置 DATABASE_URL 环境变量")
+            
+            self._engine = create_engine(
+                db_url,
+                pool_size=10,           # 连接池大小
+                max_overflow=20,        # 最大溢出连接
+                pool_recycle=3600,      # 连接回收时间（1小时）
+                pool_pre_ping=True,     # 连接健康检查
+                echo=False,             # 不打印 SQL（生产环境）
+                connect_args={
+                    "connect_timeout": 5,  # 连接超时 5 秒
+                }
+            )
+            print(f"[Database] 连接池已初始化: pool_size=10, max_overflow=20")
+        
+        return self._engine
+    
+    def get_connection(self) -> Connection:
+        """获取数据库连接"""
+        return self.get_engine().connect()
+    
+    @contextmanager
+    def connect(self) -> Generator[Connection, None, None]:
+        """上下文管理器，自动关闭连接"""
+        conn = self.get_connection()
+        try:
+            yield conn
+        finally:
+            conn.close()
+    
+    def dispose(self):
+        """释放连接池资源"""
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
+            print("[Database] 连接池已释放")
+    
+    def test_connection(self) -> bool:
+        """测试数据库连接"""
+        try:
+            with self.connect() as conn:
+                result = conn.execute(text("SELECT 1")).fetchone()
+                return result is not None
+        except Exception as e:
+            print(f"[Database] 连接测试失败: {e}")
+            return False
+
+
+# 全局单例实例
+db_manager = DatabaseManager()
+
+
+# 便捷函数（推荐使用）
+def get_engine() -> Engine:
+    """获取数据库引擎"""
+    return db_manager.get_engine()
+
+
+def get_db() -> Generator[Connection, None, None]:
+    """依赖注入：获取数据库连接（FastAPI Depends）"""
+    with db_manager.connect() as conn:
+        yield conn
+
+
+@contextmanager
+def get_connection() -> Generator[Connection, None, None]:
+    """上下文管理器：获取数据库连接"""
+    with db_manager.connect() as conn:
+        yield conn
+
+
+def dispose_engine():
+    """释放连接池（应用关闭时调用）"""
+    db_manager.dispose()
+
+
+# 兼容旧代码：提供 text 导入
+__all__ = [
+    'db_manager',
+    'get_engine',
+    'get_db',
+    'get_connection',
+    'dispose_engine',
+    'text',
+]

@@ -15,7 +15,7 @@ import json
 import os
 
 # DeepSeek API
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "os.getenv("DEEPSEEK_API_KEY", "")")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 # 成本类型关键词映射
 COST_TYPE_KEYWORDS = {

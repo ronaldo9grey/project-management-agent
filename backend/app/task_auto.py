@@ -6,20 +6,16 @@ import json
 import re
 from datetime import date, datetime
 from typing import Optional, Dict, List, Tuple
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from .database import get_engine, text
 import httpx
 
-load_dotenv()
-
-DB_URL = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "os.getenv("DEEPSEEK_API_KEY", "")")
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 
 def get_db_engine():
-    """获取数据库引擎"""
-    return create_engine(DB_URL)
+    """获取数据库引擎（使用全局单例）"""
+    return get_engine()
 
 
 def extract_version(task_id: str) -> int:

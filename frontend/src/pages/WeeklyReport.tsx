@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { redirectToLogin } from '../utils/auth'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 
@@ -106,7 +108,7 @@ ${(analysis.highlights || []).map((h: string) => `- ${h}`).join('\n')}
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/agent/login'
+    redirectToLogin()
   }
 
   return (
@@ -115,15 +117,15 @@ ${(analysis.highlights || []).map((h: string) => `- ${h}`).join('\n')}
       <header className="header">
         <div className="header-content">
           <div className="header-left">
-            <a href="/agent/" className="header-logo">
+            <Link to="/" className="header-logo">
               <span className="text-xl">⚙️</span>
               <span>项目管家</span>
-            </a>
+            </Link>
             <nav className="header-nav">
-              <a href="/agent/" className="nav-link">个人</a>
-              <a href="/agent/daily" className="nav-link">日报</a>
-              <a href="/agent/projects" className="nav-link">项目</a>
-              <a href="/agent/chat" className="nav-link">问答</a>
+              <Link to="/" className="nav-link">个人</Link>
+              <Link to="/daily" className="nav-link">日报</Link>
+              <Link to="/projects" className="nav-link">项目</Link>
+              <Link to="/chat" className="nav-link">问答</Link>
             </nav>
           </div>
           <div className="header-right">
@@ -366,18 +368,18 @@ ${(analysis.highlights || []).map((h: string) => `- ${h}`).join('\n')}
 
       {/* 移动端底部导航 */}
       <nav className="mobile-nav">
-        <a href="/agent/" className="mobile-nav-item">
+        <Link to="/" className="mobile-nav-item">
           <span className="mobile-nav-icon">🏠</span>
           <span>首页</span>
-        </a>
-        <a href="/agent/daily" className="mobile-nav-item">
+        </Link>
+        <Link to="/daily" className="mobile-nav-item">
           <span className="mobile-nav-icon">📝</span>
           <span>日报</span>
-        </a>
-        <a href="/agent/projects" className="mobile-nav-item">
+        </Link>
+        <Link to="/projects" className="mobile-nav-item">
           <span className="mobile-nav-icon">📊</span>
           <span>项目</span>
-        </a>
+        </Link>
       </nav>
 
       <style>{`

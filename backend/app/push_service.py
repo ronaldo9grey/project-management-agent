@@ -3,6 +3,7 @@
 支持飞书和微信推送
 """
 
+import os
 import requests
 import json
 from typing import Optional, List
@@ -247,14 +248,14 @@ def push_morning_alerts():
         print("非工作时间，跳过推送")
         return False
     
-    from sqlalchemy import create_engine, text
+    from .database import get_engine, text
     import os
-    from dotenv import load_dotenv
+    
     from collections import defaultdict
     
-    load_dotenv()
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
-    engine = create_engine(db_url)
+    
+    
+    engine = get_engine()
     
     with engine.connect() as conn:
         # 获取所有高风险预警
@@ -374,15 +375,15 @@ def push_afternoon_reminder():
         print("非工作时间，跳过推送")
         return False
     
-    from sqlalchemy import create_engine, text
+    from .database import get_engine, text
     import os
-    from dotenv import load_dotenv
+    
     from datetime import datetime, date
     from collections import defaultdict
     
-    load_dotenv()
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
-    engine = create_engine(db_url)
+    
+    
+    engine = get_engine()
     
     with engine.connect() as conn:
         # 今日日报提交情况

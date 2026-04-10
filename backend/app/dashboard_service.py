@@ -3,19 +3,21 @@
 独立功能，不影响其他模块
 """
 
-from sqlalchemy import create_engine, text
+from .database import get_engine, text
 from typing import List, Dict, Optional, Any
 from datetime import datetime, date, timedelta
 from decimal import Decimal
 import json
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+# 数据库连接（使用全局单例）
+engine = None
 
-# 数据库连接
-DB_URL = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
-engine = create_engine(DB_URL)
+def _get_engine():
+    """获取数据库引擎"""
+    global engine
+    if engine is None:
+        engine = get_engine()
+    return engine
 
 
 # ==================== 健康度计算 ====================

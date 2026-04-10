@@ -57,6 +57,9 @@ class Settings:
 settings = Settings()
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
+# ============== 数据库连接池（单例） ==============
+from .database import get_engine, get_connection, text, dispose_engine
+
 # ============== 定时任务 ==============
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -129,14 +132,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
         # 如果缓存没有，从数据库查询
         if not user_info:
             try:
-                from sqlalchemy import create_engine, text
+                # text 已从 database 模块导入
                 from dotenv import load_dotenv
-                load_dotenv()
-                
-                db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-                engine = create_engine(db_url)
-                
-                with engine.connect() as conn:
+                load_dotenv()                
+                with get_connection() as conn:
                     result = conn.execute(text("""
                         SELECT employee_id, name, department, position
                         FROM personnel WHERE employee_id = :username
@@ -182,16 +181,12 @@ async def get_user_info(token: str) -> Dict:
             user_data = data.get("data", data)
             
             # 从 personnel 表补充部门、岗位信息
-            from sqlalchemy import create_engine, text
+            # text 已从 database 模块导入
             from dotenv import load_dotenv
-            load_dotenv()
-            
-            db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-            engine = create_engine(db_url)
-            
+            load_dotenv()            
             employee_id = user_data.get("employee_id") or user_data.get("username")
             if employee_id:
-                with engine.connect() as conn:
+                with get_connection() as conn:
                     person_result = conn.execute(text("""
                         SELECT name, department, position, phone, email
                         FROM personnel
@@ -214,14 +209,10 @@ async def get_user_info(token: str) -> Dict:
 
 async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dict]:
     """获取项目列表，根据用户角色过滤，并计算进度"""
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-
-    with engine.connect() as conn:
+    with get_connection() as conn:
         # 判断用户角色
         if user_info:
             role_id = user_info.get("role_id")
@@ -282,14 +273,10 @@ async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dic
 
 async def get_all_projects_for_matching() -> List[Dict]:
     """获取所有项目用于日报匹配（不受权限限制）"""
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-
-    with engine.connect() as conn:
+    with get_connection() as conn:
         result = conn.execute(text("""
             SELECT id, name, leader, status FROM projects
             WHERE is_deleted = false ORDER BY id
@@ -1021,14 +1008,10 @@ async def create_daily_report(
     如果该日期已存在日报，先删除旧日报，再创建新日报
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         import json
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         username = current_user.get("username") or current_user.get("sub")
         employee_id = current_user.get("employee_id")
         token = get_user_token(username)
@@ -1043,7 +1026,7 @@ async def create_daily_report(
 
         # 先删除该日期的旧日报（智能体专用：支持覆盖）
         # 安全检查：同时匹配 employee_id 和 employee_name
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 获取用户姓名
             user_name = current_user.get("name", "")
             
@@ -1094,7 +1077,7 @@ async def create_daily_report(
 
             # 保存原始输入和AI解析结果
             if report_id and (request.original_input or request.ai_parsed_data):
-                with engine.connect() as conn:
+                with get_connection() as conn:
                     conn.execute(text("""
                         UPDATE daily_reports
                         SET original_input = :input,
@@ -1113,7 +1096,7 @@ async def create_daily_report(
             if report_id and request.ai_parsed_data:
                 entries = request.ai_parsed_data.get('entries', [])
                 if entries:
-                    with engine.connect() as conn:
+                    with get_connection() as conn:
                         # 获取该日报的所有工作项
                         work_items_result = conn.execute(text("""
                             SELECT id FROM daily_work_items 
@@ -1182,17 +1165,13 @@ async def get_my_daily_reports(
     获取我的日报列表 - 从本地数据库直接查询
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         username = current_user.get("username") or current_user.get("sub")
         employee_id = current_user.get("employee_id") or username
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 获取日报列表
             offset = (page - 1) * size
             result = conn.execute(text("""
@@ -1375,14 +1354,10 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
     try:
         username = current_user.get("username")
 
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 从 users 表获取基本信息
             result = conn.execute(text("""
                 SELECT id, username, role FROM users WHERE username = :username
@@ -1501,21 +1476,17 @@ async def update_push_token(
     }
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         from pydantic import BaseModel
         load_dotenv()
         
         # 定义请求体模型
         class PushTokenRequest(BaseModel):
-            push_token: str
-        
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-        
+            push_token: str        
         username = current_user.get("username")
         
-        with engine.connect() as conn:
+        with get_connection() as conn:
             conn.execute(text("""
                 UPDATE users SET push_token = :token WHERE username = :username
             """), {"token": push_token, "username": username})
@@ -1534,14 +1505,10 @@ def require_role(allowed_roles: List[str]):
         # 先从数据库获取用户角色
         username = current_user.get("username")
 
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT role FROM users WHERE username = :username
             """), {"username": username}).fetchone()
@@ -1589,14 +1556,10 @@ async def get_work_hours_stats(current_user: Dict = Depends(get_current_user)):
         month_start = today.replace(day=1)  # 本月1号
 
         # 直接从数据库查询（更准确）
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 今日工时
             result = conn.execute(text("""
                 SELECT COALESCE(SUM(hours_spent), 0) as hours
@@ -1702,17 +1665,13 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user)):
         employee_id = user_info.get("employee_id") if user_info else username
         employee_name = user_info.get("name") if user_info else username
 
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
         current_month = today.strftime("%Y-%m")
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 1. 今日待办任务（截止日期在今天）
             result = conn.execute(text("""
                 SELECT pt.task_id, pt.task_name, pt.project_id, p.name as project_name,
@@ -1933,16 +1892,12 @@ async def get_risk_alerts(current_user: Dict = Depends(get_current_user)):
         user_info = get_user_info_cache(username)
         role_id = user_info.get("role_id") if user_info else None
 
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 1. 延期任务统计（按项目）
             result = conn.execute(text("""
                 SELECT p.id, p.name, p.leader,
@@ -2057,14 +2012,10 @@ async def get_my_project_risks(current_user: Dict = Depends(get_current_user)):
     if not employee_id:
         return []
 
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-
-    with engine.connect() as conn:
+    with get_connection() as conn:
         # 先通过 employee_id 查询员工信息（包括内部 id）
         emp_result = conn.execute(text("""
             SELECT id, name FROM personnel 
@@ -2182,19 +2133,15 @@ async def get_team_work_hours(current_user: Dict = Depends(get_current_user)):
     if not employee_id:
         return []
 
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-
     # 获取本月第一天和最后一天
     today = datetime.now().date()
     month_start = today.replace(day=1)
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
-    with engine.connect() as conn:
+    with get_connection() as conn:
         # 查询员工姓名
         emp_result = conn.execute(text("""
             SELECT name FROM personnel 
@@ -2287,14 +2234,10 @@ async def get_project_board(current_user: Dict = Depends(get_current_user)):
     try:
         user_info = get_user_info_cache(username)
 
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 获取项目列表及风险评分
             result = conn.execute(text("""
                 SELECT p.id, p.name, p.leader, p.status, p.progress,
@@ -2360,16 +2303,12 @@ async def get_risk_matrix(current_user: Dict = Depends(get_current_user)):
         raise HTTPException(status_code=401, detail="未找到用户认证信息")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT p.id, p.name,
                        COUNT(pt.task_id) as total_tasks,
@@ -2435,13 +2374,9 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
     employee_id = current_user.get("username")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
 
         result_data = {
@@ -2452,7 +2387,7 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
             "daily_report_status": {}  # 日报状态
         }
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 1. 今日优先任务（按紧急程度排序）
             result = conn.execute(text("""
                 SELECT pt.task_id, pt.task_name, pt.project_id, p.name as project_name,
@@ -2624,13 +2559,9 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
     employee_id = current_user.get("username")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
 
         result_data = {
@@ -2641,7 +2572,7 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
             "daily_report_status": {}  # 日报状态
         }
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 1. 今日优先任务（按紧急程度排序）
             result = conn.execute(text("""
                 SELECT pt.task_id, pt.task_name, pt.project_id, p.name as project_name,
@@ -2856,13 +2787,9 @@ async def get_hours_trend(
     print(f"[DEBUG] hours_trend: employee_id={employee_id}, time_range={time_range}")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
 
         if time_range == "week":
@@ -2873,7 +2800,7 @@ async def get_hours_trend(
         start_date = today - timedelta(days=days-1)
         print(f"[DEBUG] today={today}, start_date={start_date}")
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT dr.report_date, SUM(dwi.hours_spent) as hours
                 FROM daily_reports dr
@@ -2936,17 +2863,13 @@ async def get_project_distribution(current_user: Dict = Depends(get_current_user
     employee_id = user_info.get("employee_id") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
         month_start = today.replace(day=1)
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT COALESCE(p.name, '其他') as name, SUM(dwi.hours_spent) as value
                 FROM daily_work_items dwi
@@ -2992,16 +2915,12 @@ async def get_project_risk_radar(
     - labor_risk: 人工成本风险（人工成本超支率）
     - indirect_risk: 间接成本风险（间接成本超支率）
     """
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-
     today = datetime.now().date()
 
-    with engine.connect() as conn:
+    with get_connection() as conn:
         # 1. 进度风险：延期任务比例
         result = conn.execute(text("""
             SELECT
@@ -3187,17 +3106,13 @@ async def update_project_task_status(
     """
     try:
         from .task_auto import get_latest_version_tasks, calculate_task_status
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         tasks = get_latest_version_tasks(project_id)
         updated_tasks = []
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             for task in tasks:
                 new_status, changed = calculate_task_status(task)
 
@@ -3284,15 +3199,11 @@ async def get_project_detail(
         raise HTTPException(status_code=401, detail="未找到用户认证信息")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         # 从数据库直接查询项目信息
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 项目基本信息
             project_result = conn.execute(text("""
                 SELECT id, name, leader, status,
@@ -3446,14 +3357,10 @@ async def get_project_tasks(
     获取项目任务列表（从本地数据库，只返回最新版本）
     版本规则：task_id 包含 V{版本号}，返回最大版本号的任务
     """
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-
-    with engine.connect() as conn:
+    with get_connection() as conn:
         # 获取最新版本号
         version_result = conn.execute(text("""
             SELECT MAX(CAST(SUBSTRING(task_id FROM 'V([0-9]+)') AS INTEGER)) as max_version
@@ -3795,16 +3702,13 @@ async def compare_plan_versions(
 # 全局数据库引擎（懒加载）
 _db_engine = None
 
+# 数据库引擎单例（已废弃，改用 database 模块的全局单例）
+# 保留 _db_engine 变量以兼容可能的引用
+_db_engine = None
+
 def get_db_engine():
-    """获取数据库引擎（单例）"""
-    global _db_engine
-    if _db_engine is None:
-        from sqlalchemy import create_engine
-        from dotenv import load_dotenv
-        load_dotenv()
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        _db_engine = create_engine(db_url)
-    return _db_engine
+    """获取数据库引擎（使用 database 模块的全局单例）"""
+    return get_engine()
 
 
 # 定义查询工具（简化版，不用LangChain tools）
@@ -3814,7 +3718,7 @@ def execute_query(tool_name: str, params: dict) -> str:
         engine = get_db_engine()
         from sqlalchemy import text
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             if tool_name == "query_projects":
                 sql = """
                     SELECT id, name, leader, status, progress
@@ -4026,13 +3930,9 @@ async def generate_weekly_report(
     employee_name = user_info.get("name") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
 
         # 计算本周起始日期（周一）
@@ -4043,7 +3943,7 @@ async def generate_weekly_report(
 
         end_date = start_date + timedelta(days=6)
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 1. 工时统计
             result = conn.execute(text("""
                 SELECT
@@ -4287,14 +4187,10 @@ async def get_my_notifications(
     employee_id = user_info.get("employee_id") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             sql = """
                 SELECT id, notification_type, priority_level, title, content,
                        is_read, create_time, related_task_id
@@ -4347,14 +4243,10 @@ async def mark_notification_read(
 ):
     """标记通知为已读"""
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             conn.execute(text("""
                 UPDATE tracking_notifications
                 SET is_read = true, read_time = CURRENT_TIMESTAMP
@@ -4378,14 +4270,10 @@ async def mark_all_notifications_read(
     employee_id = user_info.get("employee_id") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             conn.execute(text("""
                 UPDATE tracking_notifications
                 SET is_read = true, read_time = CURRENT_TIMESTAMP
@@ -4416,17 +4304,13 @@ async def generate_smart_notifications(
     employee_name = user_info.get("name") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         today = datetime.now().date()
         notifications_created = []
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 1. 今日待办提醒
             result = conn.execute(text("""
                 SELECT pt.task_name, p.name as project_name
@@ -4649,11 +4533,10 @@ async def upload_document(
         if not text_content.strip():
             return {"success": False, "message": "文档内容为空"}
 
-        from sqlalchemy import create_engine, text as sql_text
         engine = get_db_engine()
 
-        with engine.connect() as conn:
-            result = conn.execute(sql_text("""
+        with get_connection() as conn:
+            result = conn.execute(text("""
                 INSERT INTO documents (filename, file_type, file_size, project_id, uploaded_by)
                 VALUES (:filename, :file_type, :file_size, :project_id, :uploaded_by)
                 RETURNING id
@@ -4725,17 +4608,17 @@ async def list_documents(
 ):
     """列出文档"""
     try:
-        from sqlalchemy import create_engine, text as sql_text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             if project_id:
-                result = conn.execute(sql_text("""
+                result = conn.execute(text("""
                     SELECT id, filename, file_type, file_size, uploaded_by, created_at
                     FROM documents WHERE project_id = :pid ORDER BY created_at DESC
                 """), {"pid": project_id})
             else:
-                result = conn.execute(sql_text("""
+                result = conn.execute(text("""
                     SELECT id, filename, file_type, file_size, uploaded_by, created_at
                     FROM documents ORDER BY created_at DESC LIMIT 50
                 """))
@@ -4753,11 +4636,11 @@ async def list_documents(
 async def delete_document(doc_id: int, current_user: Dict = Depends(get_current_user)):
     """删除文档"""
     try:
-        from sqlalchemy import create_engine, text as sql_text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
-        with engine.connect() as conn:
-            conn.execute(sql_text("DELETE FROM documents WHERE id = :id"), {"id": doc_id})
+        with get_connection() as conn:
+            conn.execute(text("DELETE FROM documents WHERE id = :id"), {"id": doc_id})
             conn.commit()
 
         return {"success": True, "message": "文档已删除"}
@@ -4819,11 +4702,11 @@ async def search_documents(request: Dict, current_user: Dict = Depends(get_curre
 
         # 2. 关键词搜索（补充）
         if not results or len(results) < top_k:
-            from sqlalchemy import text as sql_text
+            from sqlalchemy import text as text
             engine = get_db_engine()
 
-            with engine.connect() as conn:
-                result = conn.execute(sql_text("""
+            with get_connection() as conn:
+                result = conn.execute(text("""
                     SELECT dc.id, dc.document_id, dc.chunk_text, d.filename, dc.metadata
                     FROM document_chunks dc
                     JOIN documents d ON dc.document_id = d.id
@@ -4862,11 +4745,11 @@ async def search_documents(request: Dict, current_user: Dict = Depends(get_curre
         return {"success": False, "message": "请输入查询内容"}
 
     try:
-        from sqlalchemy import create_engine, text as sql_text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
-        with engine.connect() as conn:
-            result = conn.execute(sql_text("""
+        with get_connection() as conn:
+            result = conn.execute(text("""
                 SELECT dc.id, dc.document_id, dc.chunk_text, d.filename
                 FROM document_chunks dc
                 JOIN documents d ON dc.document_id = d.id
@@ -4896,7 +4779,7 @@ async def export_hours_excel(
     employee_id = user_info.get("employee_id") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
         today = datetime.now().date()
@@ -4904,7 +4787,7 @@ async def export_hours_excel(
             month = today.strftime("%Y-%m")
         month_start = datetime.strptime(month + "-01", "%Y-%m-%d").date()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT dr.report_date, p.name as project_name, dwi.work_content,
                        dwi.hours_spent, dr.employee_name
@@ -4944,7 +4827,7 @@ async def predict_month_hours(current_user: Dict = Depends(get_current_user)):
     employee_id = user_info.get("employee_id") if user_info else username
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
         today = datetime.now().date()
@@ -4952,7 +4835,7 @@ async def predict_month_hours(current_user: Dict = Depends(get_current_user)):
         days_passed = today.day
         days_in_month = (today.replace(month=today.month % 12 + 1, day=1) - timedelta(days=1)).day
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT COALESCE(SUM(dwi.hours_spent), 0)
                 FROM daily_reports dr
@@ -4998,7 +4881,7 @@ async def get_team_hours_ranking(
         raise HTTPException(status_code=403, detail="无权限访问")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
         today = datetime.now().date()
@@ -5006,7 +4889,7 @@ async def get_team_hours_ranking(
             month = today.strftime("%Y-%m")
         month_start = datetime.strptime(month + "-01", "%Y-%m-%d").date()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT dr.employee_name, p.department,
                        SUM(dwi.hours_spent) as total_hours,
@@ -5048,12 +4931,12 @@ async def get_team_goals_progress(current_user: Dict = Depends(get_current_user)
         raise HTTPException(status_code=403, detail="无权限访问")
 
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
         month = datetime.now().strftime("%Y-%m")
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT user_name, title, progress_rate, status
                 FROM monthly_goals
@@ -5102,13 +4985,13 @@ def generate_project_context(project_id: int, engine) -> str:
     Returns:
         项目背景MD字符串
     """
-    from sqlalchemy import text as sql_text
+    from sqlalchemy import text as text
 
     context = ""
 
-    with engine.connect() as conn:
+    with get_connection() as conn:
         # 1. 获取项目基本信息
-        result = conn.execute(sql_text("""
+        result = conn.execute(text("""
             SELECT id, name, leader, status, progress, start_date, end_date
             FROM projects
             WHERE id = :pid
@@ -5119,7 +5002,7 @@ def generate_project_context(project_id: int, engine) -> str:
             return ""
 
         # 2. 获取项目任务列表（只取最新版本）
-        tasks_result = conn.execute(sql_text("""
+        tasks_result = conn.execute(text("""
             WITH latest_version AS (
                 SELECT MAX(CAST(SUBSTRING(task_id FROM 'V([0-9]+)') AS INTEGER)) as max_ver
                 FROM project_tasks
@@ -5222,7 +5105,7 @@ async def chat(
 
         try:
             engine = get_db_engine()
-            from sqlalchemy import text as sql_text
+            from sqlalchemy import text as text
 
             # 1. 提取项目关键词（智能提取）
             # 尝试多种关键词长度匹配
@@ -5244,9 +5127,9 @@ async def chat(
 
             # 2. 尝试匹配项目
             matched_projects = []
-            with engine.connect() as conn:
+            with get_connection() as conn:
                 for keyword in keywords_to_try:
-                    result = conn.execute(sql_text("""
+                    result = conn.execute(text("""
                         SELECT id, name, leader, status, progress
                         FROM projects
                         WHERE is_deleted = false
@@ -5281,9 +5164,9 @@ async def chat(
         rag_sources = []
 
         try:
-            with engine.connect() as conn:
+            with get_connection() as conn:
                 # 从项目知识库检索上传的文档
-                result = conn.execute(sql_text("""
+                result = conn.execute(text("""
                     SELECT project_name, doc_name, content, summary
                     FROM project_knowledge_base
                     WHERE is_deleted = false
@@ -5419,10 +5302,10 @@ async def scheduled_morning_reminder():
     """早间提醒 - 08:00"""
     print(f"[定时任务] 早间提醒 - {datetime.now()}")
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 查询今日待办和延期任务
             result = conn.execute(text("""
                 SELECT assignee_id, assignee, COUNT(*) as task_count
@@ -5453,10 +5336,10 @@ async def scheduled_evening_reminder():
     """晚间提醒 - 18:00"""
     print(f"[定时任务] 晚间提醒 - {datetime.now()}")
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 查询今日未填日报的人员
             result = conn.execute(text("""
                 SELECT employee_id, name
@@ -5486,10 +5369,10 @@ async def scheduled_risk_alert():
     """风险预警 - 09:00"""
     print(f"[定时任务] 风险预警 - {datetime.now()}")
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         engine = get_db_engine()
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 查询高风险项目
             result = conn.execute(text("""
                 SELECT p.id, p.name, p.leader,
@@ -5589,7 +5472,7 @@ async def project_chat(
 
         # ========== 第一步：动态生成项目背景 ==========
         engine = get_db_engine()
-        from sqlalchemy import text as sql_text
+        from sqlalchemy import text as text
 
         project_context = generate_project_context(project_id, engine)
 
@@ -5601,8 +5484,8 @@ async def project_chat(
         rag_sources = []
 
         try:
-            with engine.connect() as conn:
-                result = conn.execute(sql_text("""
+            with get_connection() as conn:
+                result = conn.execute(text("""
                     SELECT doc_name, content
                     FROM project_knowledge_base
                     WHERE project_id = :pid
@@ -5672,7 +5555,7 @@ async def project_chat(
             # 查询项目任务
             status_filter = params.get("status", "")
 
-            with engine.connect() as conn:
+            with get_connection() as conn:
                 sql = f"""
                     SELECT task_id, task_name, assignee, status, progress, end_date, actual_end_date
                     FROM project_tasks
@@ -5685,7 +5568,7 @@ async def project_chat(
 
                 sql += " ORDER BY task_id"
 
-                result = conn.execute(sql_text(sql))
+                result = conn.execute(text(sql))
                 tasks = []
                 for row in result:
                     tasks.append({
@@ -5702,8 +5585,8 @@ async def project_chat(
 
         elif tool_name == "query_project_risks":
             # 查询项目风险
-            with engine.connect() as conn:
-                result = conn.execute(sql_text(f"""
+            with get_connection() as conn:
+                result = conn.execute(text(f"""
                     SELECT task_id, task_name, assignee, end_date,
                            CURRENT_DATE - end_date as delay_days
                     FROM project_tasks
@@ -5730,7 +5613,7 @@ async def project_chat(
             # 查询项目工时
             employee_name_filter = params.get("employee_name", "")
 
-            with engine.connect() as conn:
+            with get_connection() as conn:
                 sql = f"""
                     SELECT dwi.assignee, SUM(dwi.hours_spent) as total_hours
                     FROM daily_work_items dwi
@@ -5744,7 +5627,7 @@ async def project_chat(
 
                 sql += " GROUP BY dwi.assignee ORDER BY total_hours DESC"
 
-                result = conn.execute(sql_text(sql))
+                result = conn.execute(text(sql))
                 hours = []
                 for row in result:
                     hours.append({
@@ -5809,6 +5692,11 @@ async def project_chat(
 @app.on_event("startup")
 async def startup_event():
     global http_client
+    
+    # 初始化数据库连接池
+    engine = get_engine()
+    print("[Database] 连接池已初始化")
+    
     # 初始化HTTP客户端
     http_client = httpx.AsyncClient(timeout=30.0)
     
@@ -5846,6 +5734,10 @@ async def shutdown_event():
         await http_client.aclose()
         http_client = None
         print("[HTTP客户端] 已关闭")
+    
+    # 释放数据库连接池
+    dispose_engine()
+    print("[Database] 连接池已释放")
 
     scheduler.shutdown()
     print("[调度器] 定时任务已停止")
@@ -6012,14 +5904,10 @@ async def delete_document_api(
     - doc_id: 文档ID
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
-        with engine.connect() as conn:
+        with get_connection() as conn:
             conn.execute(text("""
                 UPDATE project_knowledge_base
                 SET is_deleted = true
@@ -6075,14 +5963,10 @@ async def get_dashboard_projects_api(
     获取看板项目列表（含详细信息和任务数据）
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
-        load_dotenv()
-        
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-        
-        with engine.connect() as conn:
+        load_dotenv()        
+        with get_connection() as conn:
             # 获取项目基本信息
             projects = conn.execute(text("""
                 SELECT 
@@ -6237,13 +6121,9 @@ async def get_dashboard_alerts_api(
     - project_id: 按项目过滤
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         sql = """
             SELECT
                 a.id, a.project_id, p.name as project_name,
@@ -6265,7 +6145,7 @@ async def get_dashboard_alerts_api(
 
         sql += " ORDER BY CASE a.severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, a.created_at DESC"
 
-        with engine.connect() as conn:
+        with get_connection() as conn:
             alerts = conn.execute(text(sql), params).fetchall()
 
             return [{
@@ -6370,16 +6250,13 @@ async def get_ai_insight_api(
     获取 AI 洞察（按需生成）
     """
     try:
-        from sqlalchemy import create_engine, text
+        # text 已从 database 模块导入
         from dotenv import load_dotenv
         from datetime import date
 
         load_dotenv()
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-
         # 检查今日是否已生成
-        with engine.connect() as conn:
+        with get_connection() as conn:
             existing = conn.execute(text("""
                 SELECT content FROM ai_insights
                 WHERE insight_date = :today
@@ -6394,7 +6271,7 @@ async def get_ai_insight_api(
         insight = await generate_ai_insight()
 
         # 保存洞察
-        with engine.connect() as conn:
+        with get_connection() as conn:
             conn.execute(text("""
                 INSERT INTO ai_insights (insight_date, role, content)
                 VALUES (:today, :role, :content)
@@ -6416,15 +6293,12 @@ async def get_ai_insight_api(
 
 async def generate_ai_insight() -> str:
     """生成 AI 洞察（从进度、风险、成本三方面分析）"""
-    from sqlalchemy import create_engine, text
+    # text 已从 database 模块导入
     from dotenv import load_dotenv
     from datetime import date
     
-    load_dotenv()
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    engine = create_engine(db_url)
-    
-    with engine.connect() as conn:
+    load_dotenv()    
+    with get_connection() as conn:
         # 获取项目进度统计
         progress_stats = conn.execute(text("""
             SELECT 
@@ -6723,7 +6597,7 @@ async def preview_cost_import(
         sheet_name = request.get("sheet_name", "")
         column_mapping = request.get("column_mapping", {})
         
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = preview_import(file_content, file_name, sheet_name, column_mapping, conn)
         
         return {
@@ -6753,7 +6627,7 @@ async def execute_cost_import(
         cost_type = request.get("cost_type", "")
         cost_subtype = request.get("cost_subtype", "")
         
-        with engine.connect() as conn:
+        with get_connection() as conn:
             result = import_cost_data(
                 file_content, file_name, sheet_name, 
                 column_mapping, cost_type, cost_subtype, conn
@@ -6776,7 +6650,7 @@ async def get_cost_types(
     获取成本类型列表
     """
     try:
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 间接成本类型
             indirect_result = conn.execute(text("""
                 SELECT id, type_name, description 
@@ -6809,11 +6683,10 @@ async def get_cost_types(
 
 # ============== 智能周报生成 ==============
 
-# 数据库连接辅助函数
+# 数据库连接辅助函数（已废弃，改用 database 模块）
 def get_db():
-    from sqlalchemy import create_engine
-    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-    return create_engine(db_url)
+    """获取数据库引擎（使用 database 模块的全局单例）"""
+    return get_engine()
 
 @app.get("/api/agent/weekly-reports")
 async def get_weekly_reports(
@@ -6826,17 +6699,14 @@ async def get_weekly_reports(
     获取周报列表
     """
     try:
-        from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-        
+        # text 已从 database 模块导入        
         # 获取当前用户
         username = current_user.get("username") or current_user.get("sub")
         employee_id = current_user.get("employee_id") or username
         
         offset = (page - 1) * size
         
-        with engine.connect() as conn:
+        with get_connection() as conn:
             # 构建查询条件（只查询当前用户的周报）
             where_clause = "WHERE is_deleted = false AND created_by = :created_by"
             params = {"created_by": employee_id}
@@ -6921,11 +6791,8 @@ async def generate_weekly_report(
         week_start = request.get("week_start", str(last_monday.date()))
         week_end = request.get("week_end", str(last_sunday.date()))
         
-        from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-        
-        with engine.connect() as conn:
+        # text 已从 database 模块导入        
+        with get_connection() as conn:
             # 获取当前用户的日报数据
             if project_id:
                 # 单个项目
@@ -7127,11 +6994,8 @@ async def get_weekly_report_detail(
     获取周报详情
     """
     try:
-        from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
-        engine = create_engine(db_url)
-        
-        with engine.connect() as conn:
+        # text 已从 database 模块导入        
+        with get_connection() as conn:
             result = conn.execute(text("""
                 SELECT id, project_id, project_name, week_start, week_end,
                        summary, total_hours, task_count, ai_analysis,

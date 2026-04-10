@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { redirectToLogin } from '../utils/auth'
 import MobileNav from '../components/MobileNav'
 import TaskListWithMore from '../components/TaskListWithMore'
-import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { dashboardApi, statsApi, notificationApi } from '../api'
 import SmartAssistant from '../components/SmartAssistant'
@@ -228,7 +230,7 @@ export default function HomePage() {
     
     if (confirmed) {
       logout()
-      window.location.href = '/agent/login'
+      redirectToLogin()
     }
   }
 
@@ -243,26 +245,26 @@ export default function HomePage() {
       <header className="header">
         <div className="header-content">
           <div className="header-left">
-            <a href="/agent/" className="header-logo">
+            <Link to="/" className="header-logo">
               <span className="text-xl">⚙️</span>
               <span>项目管家</span>
-            </a>
+            </Link>
             <nav className="header-nav">
-              <a href="/agent/" className="nav-link active">个人</a>
-              <a href="/agent/daily" className="nav-link">日报</a>
-              <a href="/agent/projects" className="nav-link">项目</a>
-              <a href="/agent/chat" className="nav-link">问答</a>
-              <a href="/agent/dashboard" className="nav-link">看板</a>
+              <Link to="/" className="nav-link active">个人</Link>
+              <Link to="/daily" className="nav-link">日报</Link>
+              <Link to="/projects" className="nav-link">项目</Link>
+              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
           <div className="header-right">
             {/* 通知图标 */}
-            <a href="/agent/notifications" className="notification-bell">
+            <Link to="/notifications" className="notification-bell">
               🔔
               {notificationUnread > 0 && (
                 <span className="notification-badge">{notificationUnread > 99 ? '99+' : notificationUnread}</span>
               )}
-            </a>
+            </Link>
             
             <div className="user-menu-wrapper">
               <div className="user-info" onClick={() => setShowUserMenu(!showUserMenu)}>
@@ -291,7 +293,7 @@ export default function HomePage() {
                     </div>
                   </div>
                   <div className="user-dropdown-divider" />
-                  <a href="/agent/plans" className="user-dropdown-item">📋 我的计划</a>
+                  <Link to="/plans" className="user-dropdown-item">📋 我的计划</Link>
                   <button onClick={handleLogout} className="user-dropdown-item text-red-600">退出登录</button>
                 </div>
               )}
@@ -355,10 +357,10 @@ export default function HomePage() {
                   <span className="text-green-700 font-medium">今日日报已提交</span>
                 </div>
               ) : (
-                <a href="/agent/daily" className="btn btn-primary home-daily-btn">
+                <Link to="/daily" className="btn btn-primary home-daily-btn">
                   <span>📝</span>
                   填报今日日报
-                </a>
+                </Link>
               )}
             </div>
 
@@ -385,13 +387,13 @@ export default function HomePage() {
                   <div className="stat-label">涉及项目</div>
                 </div>
               </div>
-              <a href="/agent/report" className="stat-card" style={{ textDecoration: 'none', cursor: 'pointer' }}>
+              <Link to="/report" className="stat-card" style={{ textDecoration: 'none', cursor: 'pointer' }}>
                 <div className="stat-icon">📋</div>
                 <div className="stat-content">
                   <div className="stat-value" style={{ fontSize: '16px', color: '#3b82f6' }}>查看周报</div>
                   <div className="stat-label">智能生成</div>
                 </div>
-              </a>
+              </Link>
             </div>
 
             {/* 第一行 - 智能建议（全宽） */}
@@ -438,13 +440,13 @@ export default function HomePage() {
                           >
                             <div className="home-project-title">
                               <span className="home-project-arrow" style={{transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)'}}>▶</span>
-                              <a 
-                                href={`/agent/projects/${project.project_id}`} 
+                              <Link 
+                                to={`/projects/${project.project_id}`} 
                                 className="home-project-name"
                                 onClick={(e) => e.stopPropagation()}
                               >
                                 {project.project_name}
-                              </a>
+                              </Link>
                             </div>
                             <div className="home-project-meta">
                               {/* 进度条 */}
@@ -625,3 +627,4 @@ export default function HomePage() {
     </div>
   )
 }
+

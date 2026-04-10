@@ -7,19 +7,20 @@
 import os
 import asyncio
 from datetime import datetime
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from .database import get_engine, text
+
 import httpx
 
-load_dotenv()
 
-DB_URL = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+
+
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 
 
 def get_db_engine():
-    return create_engine(DB_URL)
+    """获取数据库引擎（使用全局单例）"""
+    return get_engine()
 
 
 async def generate_embedding(text: str) -> list:

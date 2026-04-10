@@ -1,16 +1,11 @@
+import { Link } from 'react-router-dom'
+import { redirectToLogin } from '../utils/auth'
 import MobileNav from '../components/MobileNav'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { dailyApi } from '../api'
 import { showToast } from '../components/Toast'
 import { confirm } from '../components/ConfirmDialog'
-
-// 格式化时间：2026-03-30T09:16:40.610629 -> 2026-03-30 09:16:40
-const formatDateTime = (dateStr: string) => {
-  if (!dateStr) return ''
-  const match = dateStr.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/)
-  return match ? `${match[1]} ${match[2]}` : dateStr
-}
 
 interface ParsedEntry {
   start_time: string
@@ -229,6 +224,8 @@ export default function DailyPage() {
         task_name: entry.content.substring(0, 50),
         work_content: entry.content,
         hours_spent: entry.hours || 0,
+        start_time: entry.start_time || undefined,
+        end_time: entry.end_time || undefined,
         progress_percentage: 0,
         status: '进行中'
       }))
@@ -262,7 +259,7 @@ export default function DailyPage() {
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/agent/login'
+    redirectToLogin()
   }
 
   const totalHours = dailyEntries.reduce((sum, e) => sum + (e.hours || 0), 0)
@@ -285,16 +282,16 @@ export default function DailyPage() {
       <header className="header">
         <div className="header-content">
           <div className="header-left">
-            <a href="/agent/" className="header-logo">
+            <Link to="/" className="header-logo">
               <span className="text-xl">⚙️</span>
               <span>项目管家</span>
-            </a>
+            </Link>
             <nav className="header-nav">
-              <a href="/agent/" className="nav-link">个人</a>
-              <a href="/agent/daily" className="nav-link active">日报</a>
-              <a href="/agent/projects" className="nav-link">项目</a>
-              <a href="/agent/chat" className="nav-link">问答</a>
-              <a href="/agent/dashboard" className="nav-link">看板</a>
+              <Link to="/" className="nav-link">个人</Link>
+              <Link to="/daily" className="nav-link active">日报</Link>
+              <Link to="/projects" className="nav-link">项目</Link>
+              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
           <div className="header-right">
@@ -337,33 +334,39 @@ export default function DailyPage() {
       {/* 主内容 */}
       <main className="content-wrapper">
         {/* 日期选择区域 */}
-        <div className="mb-6">
-          <div className="daily-date-header" style={{ position: 'relative' }}>
-            <span className="daily-date-icon">📅</span>
+        <div style={{marginBottom: '16px'}}>
+          <div style={{position: 'relative', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px'}}>
+            <span style={{fontSize: '20px'}}>📅</span>
             <h1 
-              className="daily-date-text" 
-              style={{ cursor: 'pointer', borderBottom: '2px dashed #3b82f6', paddingBottom: '2px' }}
+              style={{ 
+                cursor: 'pointer', 
+                borderBottom: '2px dashed #3b82f6', 
+                paddingBottom: '2px',
+                fontSize: '16px',
+                fontWeight: 600,
+                margin: 0
+              }}
               onClick={() => setShowDatePicker(!showDatePicker)}
             >
               {formatDateDisplay(selectedDate)}
             </h1>
-            <span className="tag tag-primary">日报填报</span>
+            <span className="tag tag-primary" style={{marginLeft: 'auto'}}>日报填报</span>
             
             {/* 日期选择下拉框 */}
             {showDatePicker && (
               <div style={{
                 position: 'absolute',
                 top: '100%',
-                left: '44px',
+                left: 0,
+                right: 0,
                 marginTop: '8px',
                 background: 'white',
                 borderRadius: '12px',
                 boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
                 border: '1px solid #e5e7eb',
-                maxHeight: '300px',
+                maxHeight: '250px',
                 overflowY: 'auto',
-                zIndex: 100,
-                minWidth: '220px'
+                zIndex: 100
               }}>
                 {getAvailableDates().map(d => (
                   <div
@@ -375,32 +378,21 @@ export default function DailyPage() {
                       setParseWarnings([])
                     }}
                     style={{
-                      padding: '12px 16px',
+                      padding: '10px 12px',
                       cursor: 'pointer',
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
                       background: d.date === selectedDate ? '#eff6ff' : 'white',
-                      borderBottom: '1px solid #f1f5f9',
-                      transition: 'background 0.2s'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (d.date !== selectedDate) {
-                        e.currentTarget.style.background = '#f8fafc'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (d.date !== selectedDate) {
-                        e.currentTarget.style.background = 'white'
-                      }
+                      borderBottom: '1px solid #f1f5f9'
                     }}
                   >
-                    <span style={{ fontWeight: d.isToday ? 600 : 400, color: '#1e293b' }}>
-                      {d.label}
-                      {d.isToday && <span style={{ color: '#3b82f6', marginLeft: '8px', fontSize: '12px' }}>今天</span>}
+                    <span style={{ fontWeight: d.isToday ? 600 : 400, color: '#1e293b', fontSize: '14px' }}>
+                      {d.label.split(' ')[0]}
+                      {d.isToday && <span style={{ color: '#3b82f6', marginLeft: '4px', fontSize: '11px' }}>今天</span>}
                     </span>
                     {d.hasReport && (
-                      <span style={{ fontSize: '11px', color: '#10b981', background: '#d1fae5', padding: '2px 6px', borderRadius: '4px' }}>
+                      <span style={{ fontSize: '10px', color: '#10b981', background: '#d1fae5', padding: '2px 6px', borderRadius: '4px' }}>
                         已填报
                       </span>
                     )}
@@ -413,30 +405,33 @@ export default function DailyPage() {
           {/* 已有日报提示 */}
           {existingReport && (
             <div style={{
-              marginTop: '12px',
-              padding: '12px 16px',
+              marginTop: '10px',
+              padding: '10px 12px',
               background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-              borderRadius: '10px',
+              borderRadius: '8px',
               border: '1px solid #fbbf24',
               display: 'flex',
               alignItems: 'center',
-              gap: '8px'
+              gap: '6px',
+              fontSize: '13px'
             }}>
               <span>💡</span>
-              <span style={{ color: '#92400e', fontSize: '14px' }}>
-                该日期已有日报（{existingReport.total_hours.toFixed(1)}小时），新提交将覆盖原内容
+              <span style={{ color: '#92400e' }}>
+                该日期已有日报（{existingReport.total_hours.toFixed(1)}h），新提交将覆盖
               </span>
             </div>
           )}
           
           {!existingReport && selectedDate !== today && (
-            <p style={{ marginTop: '12px', color: '#64748b', fontSize: '14px', marginLeft: '44px' }}>
+            <p style={{ marginTop: '8px', color: '#64748b', fontSize: '13px', marginLeft: '28px' }}>
               💡 将为该日期新建日报
             </p>
           )}
           
           {!existingReport && selectedDate === today && (
-            <p className="daily-date-hint">AI 智能解析，自然语言一键提交</p>
+            <p style={{ marginTop: '8px', color: '#64748b', fontSize: '13px', marginLeft: '28px' }}>
+              AI 智能解析，自然语言一键提交
+            </p>
           )}
         </div>
 
@@ -637,38 +632,61 @@ export default function DailyPage() {
                   <div className="space-y-4" style={{flex: 1, overflowY: 'auto', maxHeight: '400px'}}>
                   {dailyEntries.map((entry, index) => (
                     <div key={index} className="daily-entry-item parse-result-card" style={{animationDelay: `${index * 0.1}s`}}>
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1" style={{paddingLeft: '12px'}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                        <div style={{flex: 1, paddingLeft: '12px', minWidth: 0}}>
                           {/* 时间行 - 突出显示 */}
-                          <div className="daily-entry-header">
-                            <span className="tag tag-time">
-                              🕐 {entry.start_time} - {entry.end_time}
+                          <div style={{
+                            display: 'flex', 
+                            flexWrap: 'wrap', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            marginBottom: '8px'
+                          }}>
+                            <span className="tag tag-time" style={{whiteSpace: 'nowrap'}}>
+                              🕐 {entry.start_time}-{entry.end_time}
                             </span>
-                            <span className="tag tag-hours">{entry.hours}h</span>
+                            <span className="tag tag-hours" style={{whiteSpace: 'nowrap'}}>{entry.hours}h</span>
                             {entry.location && (
-                              <span className="tag tag-default">📍 {entry.location}</span>
+                              <span className="tag tag-default" style={{whiteSpace: 'nowrap'}}>📍 {entry.location}</span>
                             )}
                           </div>
                           
                           {/* 工作内容 */}
-                          <p className="daily-entry-content">
+                          <p style={{
+                            color: '#1f2937',
+                            fontSize: '14px',
+                            lineHeight: 1.6,
+                            marginBottom: '8px',
+                            wordBreak: 'break-word'
+                          }}>
                             {entry.content}
                           </p>
                           
                           {/* 匹配的项目 - 突出显示 */}
                           {entry.matched_project_name && (
-                            <div className="daily-entry-footer">
-                              <span className="tag tag-primary">
-                                🔗 {entry.matched_project_name}
+                            <div style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              <span className="tag tag-primary" style={{whiteSpace: 'nowrap'}}>
+                                🔗 {entry.matched_project_name.length > 15 
+                                  ? entry.matched_project_name.substring(0, 15) + '...' 
+                                  : entry.matched_project_name}
                               </span>
                               {entry.matched_task_name && (
-                                <span className="tag tag-info" style={{background: '#dbeafe', color: '#1e40af'}}>
-                                  📋 {entry.matched_task_name}
-                                </span>
-                              )}
-                              {entry.matched_task_id && (
-                                <span className="text-xs text-gray-400" style={{fontFamily: 'monospace'}}>
-                                  ({entry.matched_task_id})
+                                <span className="tag tag-info" style={{
+                                  background: '#dbeafe', 
+                                  color: '#1e40af',
+                                  whiteSpace: 'nowrap',
+                                  maxWidth: '120px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis'
+                                }}>
+                                  📋 {entry.matched_task_name.length > 10 
+                                    ? entry.matched_task_name.substring(0, 10) + '...' 
+                                    : entry.matched_task_name}
                                 </span>
                               )}
                             </div>
@@ -676,11 +694,20 @@ export default function DailyPage() {
                           
                           {/* 未匹配提示 */}
                           {!entry.matched_project_name && entry.project_hint && (
-                            <div className="daily-entry-footer">
-                              <span className="tag tag-warning">
-                                ⚠️ 未匹配项目
+                            <div style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}>
+                              <span className="tag tag-warning" style={{whiteSpace: 'nowrap'}}>
+                                ⚠️ 未匹配
                               </span>
-                              <span className="text-gray-500 text-sm">{entry.project_hint}</span>
+                              <span style={{
+                                color: '#6b7280', 
+                                fontSize: '12px',
+                                wordBreak: 'break-word'
+                              }}>{entry.project_hint}</span>
                             </div>
                           )}
                         </div>
@@ -688,10 +715,27 @@ export default function DailyPage() {
                         {/* 删除按钮 */}
                         <button
                           onClick={() => removeDailyEntry(index)}
-                          className="ml-2 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          style={{
+                            marginLeft: '8px',
+                            padding: '8px',
+                            color: '#9ca3af',
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            flexShrink: 0
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#ef4444';
+                            e.currentTarget.style.background = '#fef2f2';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#9ca3af';
+                            e.currentTarget.style.background = 'transparent';
+                          }}
                           title="删除此条"
                         >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                           </svg>
                         </button>
@@ -752,10 +796,16 @@ export default function DailyPage() {
                   return (
                     <div key={report.id} className="history-report-item">
                       <div 
-                        className="daily-history-header"
+                        style={{
+                          padding: '12px',
+                          borderBottom: '1px solid #e5e7eb',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px'
+                        }}
                       >
+                        {/* 第一行：日期和展开箭头 */}
                         <div 
-                          className="daily-history-info"
                           onClick={() => {
                             const newExpanded = new Set(expandedReports)
                             if (isExpanded) {
@@ -765,31 +815,56 @@ export default function DailyPage() {
                             }
                             setExpandedReports(newExpanded)
                           }}
-                          style={{ cursor: 'pointer', flex: 1 }}
+                          style={{ 
+                            cursor: 'pointer', 
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}
                         >
-                          <span className="text-lg">📅</span>
-                          <span className="font-medium text-gray-900">{report.report_date}</span>
-                          <span className="tag tag-success">{report.status}</span>
+                          <span style={{fontSize: '18px'}}>📅</span>
+                          <span style={{fontWeight: 600, color: '#1f2937', fontSize: '15px'}}>{report.report_date}</span>
                           <span style={{
-                            marginLeft: '8px',
-                            fontSize: '12px',
+                            fontSize: '11px',
                             color: '#64748b',
                             transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
                             transition: 'transform 0.2s'
                           }}>▼</span>
                         </div>
-                        <div className="daily-history-meta">
-                          <span className="tag tag-hours">{report.total_hours}h</span>
-                          <span className="text-sm text-gray-500">{formatDateTime(report.created_at)}</span>
+                        
+                        {/* 第二行：状态、工时、编辑按钮 */}
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          flexWrap: 'wrap'
+                        }}>
+                          <span style={{
+                            fontSize: '11px',
+                            padding: '2px 8px',
+                            borderRadius: '4px',
+                            background: report.status === '已提交' ? '#d1fae5' : '#fef3c7',
+                            color: report.status === '已提交' ? '#059669' : '#d97706'
+                          }}>
+                            {report.status === '已提交' ? '✓ 已提交' : report.status}
+                          </span>
+                          <span style={{
+                            fontSize: '13px',
+                            fontWeight: 600,
+                            color: '#3b82f6',
+                            background: '#eff6ff',
+                            padding: '2px 8px',
+                            borderRadius: '4px'
+                          }}>
+                            {report.total_hours}h
+                          </span>
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
-                              // 切换到该日期并加载原内容
                               setSelectedDate(report.report_date)
                               if (report.original_input) {
                                 setInputText(report.original_input)
                               }
-                              // 滚动到顶部
                               window.scrollTo({ top: 0, behavior: 'smooth' })
                             }}
                             style={{
@@ -801,10 +876,11 @@ export default function DailyPage() {
                               border: '1px solid #bfdbfe',
                               borderRadius: '6px',
                               cursor: 'pointer',
-                              marginLeft: '8px'
+                              marginLeft: 'auto',
+                              whiteSpace: 'nowrap'
                             }}
                           >
-                            ✏️ 编辑
+                            编辑
                           </button>
                         </div>
                       </div>
@@ -862,16 +938,57 @@ export default function DailyPage() {
                                   </div>
                                   
                                   {items.map((item, idx) => (
-                                    <div key={idx} className="daily-history-item" style={{paddingLeft: '20px'}}>
-                                      <div style={{display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px'}}>
+                                    <div key={idx} style={{
+                                      padding: '10px 12px',
+                                      background: '#fafafa',
+                                      marginBottom: '8px',
+                                      borderRadius: '6px'
+                                    }}>
+                                      {/* 时间和工时 - 一行显示 */}
+                                      <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px',
+                                        marginBottom: '6px',
+                                        flexWrap: 'wrap'
+                                      }}>
                                         {item.start_time && item.end_time ? (
-                                          <span className="daily-history-time">⏰ {item.start_time}-{item.end_time}</span>
+                                          <span style={{
+                                            fontSize: '12px',
+                                            color: '#059669',
+                                            background: '#d1fae5',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px',
+                                            whiteSpace: 'nowrap'
+                                          }}>
+                                            ⏰ {item.start_time}-{item.end_time}
+                                          </span>
                                         ) : (
-                                          <span className="daily-history-time" style={{color: '#94a3b8'}}>⏱️ 未记录时间</span>
+                                          <span style={{
+                                            fontSize: '12px',
+                                            color: '#94a3b8',
+                                            background: '#f1f5f9',
+                                            padding: '2px 6px',
+                                            borderRadius: '4px'
+                                          }}>
+                                            ⏱️ 未记录
+                                          </span>
                                         )}
-                                        <span className="daily-history-hours" style={{marginLeft: 'auto'}}>{item.hours_spent}h</span>
+                                        <span style={{
+                                          fontSize: '13px',
+                                          fontWeight: 600,
+                                          color: '#3b82f6',
+                                          marginLeft: 'auto'
+                                        }}>{item.hours_spent}h</span>
                                       </div>
-                                      <div className="daily-history-content" style={{marginBottom: '4px'}}>{item.work_content}</div>
+                                      
+                                      {/* 工作内容 */}
+                                      <div style={{
+                                        fontSize: '13px',
+                                        color: '#374151',
+                                        lineHeight: 1.5,
+                                        wordBreak: 'break-word'
+                                      }}>{item.work_content}</div>
                                       {item.task_id && (
                                         <div style={{marginTop: '4px'}}>
                                           <span style={{

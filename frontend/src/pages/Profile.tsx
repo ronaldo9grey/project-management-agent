@@ -1,3 +1,4 @@
+import { redirectToLogin } from '../utils/auth'
 import MobileNav from '../components/MobileNav'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
@@ -40,7 +41,7 @@ export default function ProfilePage() {
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/agent/login'
+    redirectToLogin()
   }
 
   const menuItems = [

@@ -1,3 +1,4 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import HomePage from './pages/Home'
 import DashboardPage from './pages/Dashboard'
 import DailyPage from './pages/Daily'
@@ -10,58 +11,50 @@ import WeeklyReportPage from './pages/WeeklyReport'
 import LoginPage from './pages/Login'
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
-
-// 获取基础路径
-const BASE_PATH = '/agent'
+import { isAuthenticated } from './utils/auth'
 
 function App() {
-  const fullPath = window.location.pathname
-  // 去掉基础路径获取实际路由
-  const path = fullPath.startsWith(BASE_PATH) 
-    ? fullPath.slice(BASE_PATH.length) || '/'
-    : fullPath
-
-  // 登录页面直接渲染，不做任何重定向
-  if (path === '/login') {
-    return <LoginPage />
-  }
-
-  // 其他页面检查登录状态
-  const storage = localStorage.getItem('project-agent-storage')
-  let token = null
-  if (storage) {
-    try {
-      const data = JSON.parse(storage)
-      token = data.state?.token
-    } catch {}
-  }
-
-  // 未登录跳转到登录页
-  if (!token) {
-    window.location.href = `${BASE_PATH}/login`
-    return null
-  }
-
-  // 检查是否为项目详情页
-  const projectDetailMatch = path.match(/^\/projects\/(\d+)$/)
-  
-  // 已登录，根据路径渲染
   return (
-    <ToastProvider>
-      <ConfirmProvider>
-        <div className="min-h-screen bg-gray-50">
-          {path === '/' && <HomePage />}
-          {path === '/dashboard' && <DashboardPage />}
-          {path === '/daily' && <DailyPage />}
-          {path === '/projects' && <ProjectsPage />}
-          {path === '/plans' && <PlansPage />}
-          {path === '/chat' && <ChatPage />}
-          {path === '/notifications' && <NotificationsPage />}
-          {path === '/report' && <WeeklyReportPage />}
-          {projectDetailMatch && <ProjectDetailPage />}
-        </div>
-      </ConfirmProvider>
-    </ToastProvider>
+    <BrowserRouter basename="/agent">
+      <ToastProvider>
+        <ConfirmProvider>
+          <Routes>
+            {/* 登录页 */}
+            <Route path="/login" element={<LoginPage />} />
+            
+            {/* 需要认证的页面 - 暂时保持页面独立 header */}
+            <Route
+              path="/*"
+              element={
+                <ProtectedRoutes />
+              }
+            />
+          </Routes>
+        </ConfirmProvider>
+      </ToastProvider>
+    </BrowserRouter>
+  )
+}
+
+// 认证保护组件
+function ProtectedRoutes() {
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace />
+  }
+  
+  return (
+    <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/dashboard" element={<DashboardPage />} />
+      <Route path="/daily" element={<DailyPage />} />
+      <Route path="/projects" element={<ProjectsPage />} />
+      <Route path="/projects/:id" element={<ProjectDetailPage />} />
+      <Route path="/plans" element={<PlansPage />} />
+      <Route path="/chat" element={<ChatPage />} />
+      <Route path="/notifications" element={<NotificationsPage />} />
+      <Route path="/report" element={<WeeklyReportPage />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   )
 }
 

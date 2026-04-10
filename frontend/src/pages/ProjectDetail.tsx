@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { redirectToLogin } from '../utils/auth'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { projectApi } from '../api'
@@ -149,7 +151,7 @@ export default function ProjectDetailPage() {
       
       if (statsRes.status === 401) {
         useAppStore.getState().logout()
-        window.location.href = '/agent/login'
+        redirectToLogin()
         return
       }
       
@@ -160,7 +162,7 @@ export default function ProjectDetailPage() {
       
       if (docsRes.status === 401) {
         useAppStore.getState().logout()
-        window.location.href = '/agent/login'
+        redirectToLogin()
         return
       }
       
@@ -206,7 +208,7 @@ export default function ProjectDetailPage() {
       
       if (res.status === 401) {
         useAppStore.getState().logout()
-        window.location.href = '/agent/login'
+        redirectToLogin()
         return
       }
       
@@ -276,7 +278,7 @@ export default function ProjectDetailPage() {
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/agent/login'
+    redirectToLogin()
   }
 
   const getStatusTag = (status: string) => {
@@ -298,10 +300,10 @@ export default function ProjectDetailPage() {
         <header className="header">
           <div className="header-content">
             <div className="header-left">
-              <a href="/agent/" className="header-logo">
+              <Link to="/" className="header-logo">
                 <span className="text-xl">⚙️</span>
                 <span>项目管家</span>
-              </a>
+              </Link>
             </div>
           </div>
         </header>
@@ -335,17 +337,17 @@ export default function ProjectDetailPage() {
       <div className="page-container">
         <header className="header">
           <div className="header-content">
-            <a href="/agent/projects" className="header-logo">
+            <Link to="/projects" className="header-logo">
               <span className="text-xl">⚙️</span>
               <span>项目管家</span>
-            </a>
+            </Link>
           </div>
         </header>
         <main className="content-wrapper">
           <div className="empty-state">
             <div className="empty-icon">🔍</div>
             <p className="empty-title">项目不存在</p>
-            <a href="/agent/projects" className="btn btn-primary mt-4">返回项目列表</a>
+            <Link to="/projects" className="btn btn-primary mt-4">返回项目列表</Link>
           </div>
         </main>
       </div>
@@ -358,16 +360,16 @@ export default function ProjectDetailPage() {
       <header className="header">
         <div className="header-content">
           <div className="header-left">
-            <a href="/agent/" className="header-logo">
+            <Link to="/" className="header-logo">
               <span className="text-xl">⚙️</span>
               <span>项目管家</span>
-            </a>
+            </Link>
             <nav className="header-nav">
-              <a href="/agent/" className="nav-link">个人</a>
-              <a href="/agent/daily" className="nav-link">日报</a>
-              <a href="/agent/projects" className="nav-link active">项目</a>
-              <a href="/agent/chat" className="nav-link">问答</a>
-              <a href="/agent/dashboard" className="nav-link">看板</a>
+              <Link to="/" className="nav-link">个人</Link>
+              <Link to="/daily" className="nav-link">日报</Link>
+              <Link to="/projects" className="nav-link active">项目</Link>
+              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
           <div className="header-right">
@@ -406,12 +408,12 @@ export default function ProjectDetailPage() {
       {/* 主内容 */}
       <main className="content-wrapper">
         {/* 返回按钮 */}
-        <a href="/agent/projects" className="back-link">
+        <Link to="/projects" className="back-link">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
           返回项目列表
-        </a>
+        </Link>
         
         {/* ========== 第一行：项目基本信息（全宽）========== */}
         <div className="card mt-4">
@@ -819,9 +821,9 @@ export default function ProjectDetailPage() {
             <h2 className="card-title">📋 项目计划</h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500">{(tasks || []).length} 个任务</span>
-              <a href={`/agent/plans`} className="btn btn-secondary btn-sm">
+              <Link to="/plans" className="btn btn-secondary btn-sm">
                 上传计划
-              </a>
+              </Link>
             </div>
           </div>
           <div className="card-body">
@@ -908,22 +910,22 @@ export default function ProjectDetailPage() {
 
       {/* 移动端底部导航 */}
       <nav className="mobile-nav">
-        <a href="/agent/" className="mobile-nav-item">
+        <Link to="/" className="mobile-nav-item">
           <span className="mobile-nav-icon">🏠</span>
           <span>首页</span>
-        </a>
-        <a href="/agent/daily" className="mobile-nav-item">
+        </Link>
+        <Link to="/daily" className="mobile-nav-item">
           <span className="mobile-nav-icon">📝</span>
           <span>日报</span>
-        </a>
-        <a href="/agent/projects" className="mobile-nav-item active">
+        </Link>
+        <Link to="/projects" className="mobile-nav-item active">
           <span className="mobile-nav-icon">📊</span>
           <span>项目</span>
-        </a>
-        <a href="/agent/plans" className="mobile-nav-item">
+        </Link>
+        <Link to="/plans" className="mobile-nav-item">
           <span className="mobile-nav-icon">📁</span>
           <span>计划</span>
-        </a>
+        </Link>
       </nav>
     </div>
   )

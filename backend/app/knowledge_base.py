@@ -12,16 +12,16 @@ import json
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 import httpx
-from sqlalchemy import create_engine, text
-from dotenv import load_dotenv
+from .database import get_engine, text
+
 import PyPDF2
 from docx import Document
 
 # 加载环境变量
-load_dotenv()
+
 
 # 数据库连接
-DB_URL = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+
 
 # DeepSeek API配置
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -172,7 +172,7 @@ async def upload_document(
         embedding = await generate_embedding(text_content)
         
         # 5. 存入数据库
-        engine = create_engine(DB_URL)
+        engine = get_engine()
         with engine.connect() as conn:
             # 如果有向量，使用带向量的插入
             if embedding:
@@ -257,7 +257,7 @@ async def query_knowledge(
     返回：答案和相关文档
     """
     try:
-        engine = create_engine(DB_URL)
+        engine = get_engine()
         
         # 1. 查询相关文档（暂时返回项目所有文档，后续可改用向量搜索）
         with engine.connect() as conn:
@@ -412,7 +412,7 @@ def get_knowledge_list(
     返回：文档列表
     """
     try:
-        engine = create_engine(DB_URL)
+        engine = get_engine()
         
         with engine.connect() as conn:
             # 构建查询条件
@@ -469,7 +469,7 @@ def get_knowledge_stats(project_id: Optional[int] = None) -> Dict[str, Any]:
     返回：统计信息
     """
     try:
-        engine = create_engine(DB_URL)
+        engine = get_engine()
         
         with engine.connect() as conn:
             if project_id:

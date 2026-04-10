@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { redirectToLogin } from '../utils/auth'
 import MobileNav from '../components/MobileNav'
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore } from '../store'
@@ -85,7 +87,7 @@ export default function ChatPage() {
 
   const handleLogout = () => {
     logout()
-    window.location.href = '/agent/login'
+    redirectToLogin()
   }
 
   return (
@@ -94,16 +96,16 @@ export default function ChatPage() {
       <header className="header">
         <div className="header-content">
           <div className="header-left">
-            <a href="/agent/" className="header-logo">
+            <Link to="/" className="header-logo">
               <span className="text-xl">⚙️</span>
               <span>项目管家</span>
-            </a>
+            </Link>
             <nav className="header-nav">
-              <a href="/agent/" className="nav-link">个人</a>
-              <a href="/agent/daily" className="nav-link">日报</a>
-              <a href="/agent/projects" className="nav-link">项目</a>
-              <a href="/agent/chat" className="nav-link active">问答</a>
-              <a href="/agent/dashboard" className="nav-link">看板</a>
+              <Link to="/" className="nav-link">个人</Link>
+              <Link to="/daily" className="nav-link">日报</Link>
+              <Link to="/projects" className="nav-link">项目</Link>
+              <Link to="/chat" className="nav-link active">问答</Link>
+              <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
           <div className="header-right">
