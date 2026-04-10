@@ -4,6 +4,7 @@ import MobileNav from '../components/MobileNav'
 import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store'
 import { plansApi, projectsApi } from '../api'
+import * as XLSX from 'xlsx'
 
 interface Project {
   id: number
@@ -84,6 +85,9 @@ export default function PlansPage() {
   const [compareVersions, setCompareVersions] = useState<[number | null, number | null]>([null, null])
   const [compareResult, setCompareResult] = useState<CompareResult | null>(null)
   const [isComparing, setIsComparing] = useState(false)
+  const [previewVersion, setPreviewVersion] = useState<any>(null)
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [noVersionToCompare, setNoVersionToCompare] = useState(false)
 
   useEffect(() => {
@@ -204,6 +208,61 @@ export default function PlansPage() {
   const handleLogout = () => {
     logout()
     redirectToLogin()
+  }
+
+  // 预览Excel文件
+  const handlePreviewExcel = async (version: PlanVersion) => {
+    if (!version.file_name) {
+      alert('该版本没有关联的Excel文件')
+      return
+    }
+    
+    setPreviewVersion(version)
+    setIsLoadingPreview(true)
+    setPreviewHtml('')
+    
+    try {
+      // 从服务器获取Excel文件
+      const response = await fetch(`/api/agent/plans/file/${version.id}`, {
+        headers: {
+          'Authorization': `Bearer ${useAppStore.getState().token}`
+        }
+      })
+      
+      if (!response.ok) {
+        throw new Error('文件不存在或已删除')
+      }
+      
+      const blob = await response.blob()
+      const file = new File([blob], version.file_name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      
+      // 使用SheetJS解析
+      const data = await file.arrayBuffer()
+      const workbook = XLSX.read(data, { type: 'array' })
+      
+      // 获取第一个Sheet
+      const sheetName = workbook.SheetNames[0]
+      const sheet = workbook.Sheets[sheetName]
+      
+      // 转换为HTML
+      const html = XLSX.utils.sheet_to_html(sheet, {
+        editable: false,
+        header: `<table style="border-collapse: collapse; width: 100%; font-size: 12px;">`,
+        footer: '</table>'
+      })
+      
+      // 美化表格样式
+      const styledHtml = html
+        .replace(/<td/g, '<td style="border: 1px solid #e5e7eb; padding: 4px 8px;"')
+        .replace(/<th/g, '<th style="border: 1px solid #e5e7eb; padding: 4px 8px; background: #f3f4f6; font-weight: 600;"')
+      
+      setPreviewHtml(styledHtml)
+    } catch (error: any) {
+      console.error('预览Excel失败:', error)
+      alert(`预览失败: ${error.message}`)
+    } finally {
+      setIsLoadingPreview(false)
+    }
   }
 
   return (
@@ -363,7 +422,7 @@ export default function PlansPage() {
                                 {v.file_name && (
                                   <>
                                     <span className="hidden sm:inline">•</span>
-                                    <span className="text-xs truncate max-w-[120px]">{v.file_name}</span>
+                                    <span className="text-xs text-blue-600 cursor-pointer hover:underline" onClick={() => alert('988489c8529f80fd5f0053d14e2d')}>{v.file_name}</span>
                                   </>
                                 )}
                               </div>
