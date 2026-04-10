@@ -258,7 +258,7 @@ export default function PlansPage() {
           name: sheetName,
           celldata: celldata,
           row: Math.max(jsonData.length, 100),
-          column: Math.max(jsonData[0]?.length || 20, 26)
+          column: Math.max((jsonData[0] as any[])?.length || 20, 26)
         })
       })
       
