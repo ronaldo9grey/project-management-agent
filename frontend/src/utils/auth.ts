@@ -5,25 +5,18 @@
 const BASE_PATH = '/agent'
 
 /**
- * 安全跳转 - 避免在错误页面触发跨域问题
+ * 安全跳转 - 简化版，不依赖 protocol 判断
  */
 export function safeRedirect(path: string): void {
   console.log('[Auth] safeRedirect called, path:', path)
-  console.log('[Auth] current location:', window.location.href)
-  console.log('[Auth] current protocol:', window.location.protocol)
   
-  // 检查当前协议是否正常
-  if (window.location.protocol.startsWith('http')) {
-    // 使用 replace 避免历史记录堆积
+  try {
+    // 优先使用 replace（不产生历史记录）
     window.location.replace(path)
-  } else {
-    // 在错误页面时，尝试恢复到正常页面
-    console.warn('[Auth] 当前处于错误页面，延迟跳转')
-    setTimeout(() => {
-      if (window.location.protocol.startsWith('http')) {
-        window.location.replace(path)
-      }
-    }, 2000)
+  } catch (err) {
+    // 备用方案
+    console.warn('[Auth] replace failed, using href')
+    window.location.href = path
   }
 }
 
@@ -32,7 +25,6 @@ export function safeRedirect(path: string): void {
  */
 export function redirectToLogin(): void {
   console.log('[Auth] redirectToLogin called')
-  console.trace('[Auth] redirectToLogin call stack')
   
   // 清除本地存储
   try {
@@ -47,19 +39,15 @@ export function redirectToLogin(): void {
 export function isAuthenticated(): boolean {
   try {
     const storage = localStorage.getItem('project-agent-storage')
-    console.log('[Auth] isAuthenticated - storage exists:', !!storage)
     
     if (!storage) {
-      console.log('[Auth] isAuthenticated - no storage, returning false')
       return false
     }
     
     const data = JSON.parse(storage)
     const token = data.state?.token
-    console.log('[Auth] isAuthenticated - token exists:', !!token)
     
     if (!token) {
-      console.log('[Auth] isAuthenticated - no token, returning false')
       return false
     }
     
@@ -68,10 +56,6 @@ export function isAuthenticated(): boolean {
     const exp = payload.exp * 1000
     const now = Date.now()
     const isValid = now < exp
-    
-    console.log('[Auth] isAuthenticated - token exp:', new Date(exp).toISOString())
-    console.log('[Auth] isAuthenticated - now:', new Date(now).toISOString())
-    console.log('[Auth] isAuthenticated - token valid:', isValid)
     
     return isValid
   } catch (e) {
@@ -111,14 +95,15 @@ export function getTokenExpiry(): number | null {
 }
 
 /**
- * 检查 token 是否即将过期（30 分钟内）
+ * 检查 token 是否即将过期（10 分钟内）
+ * 从 30 分钟改为 10 分钟，减少刷新频率
  */
 export function isTokenExpiringSoon(): boolean {
   const expiry = getTokenExpiry()
   if (!expiry) return true // 无过期时间视为需要刷新
   
-  const thirtyMinutes = 30 * 60 * 1000
-  return (expiry - Date.now()) < thirtyMinutes
+  const tenMinutes = 10 * 60 * 1000  // 从 30 分钟改为 10 分钟
+  return (expiry - Date.now()) < tenMinutes
 }
 
 /**

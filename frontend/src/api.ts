@@ -75,8 +75,8 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
   return config
 })
 
-// 响应拦截器 - 处理错误 + 请求重试
-const MAX_RETRY = 3  // 增加重试次数
+// 响应拦截器 - 处理错误 + 请求重试（指数退避）
+const MAX_RETRY = 3
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
@@ -89,28 +89,26 @@ apiClient.interceptors.response.use(
     
     // 网络错误（ERR_CONNECTION_RESET 等）优先重试
     if (!error.response && (originalRequest._retry === undefined || originalRequest._retry < MAX_RETRY)) {
+      // 检查网络状态
+      if (!window.navigator.onLine) {
+        showErrorMessage('网络已断开，请检查网络连接')
+        return Promise.reject(error)
+      }
+      
       originalRequest._retry = (originalRequest._retry || 0) + 1
-      console.log(`[Network] 连接失败，重试 ${originalRequest._retry}/${MAX_RETRY}`, error.message)
-      await new Promise(r => setTimeout(r, 1500)) // 等待 1.5 秒
+      
+      // 指数退避：1.5s → 3s → 6s
+      const delay = 1500 * Math.pow(2, originalRequest._retry - 1)
+      console.log(`[Network] 连接失败，${delay/1000}s 后重试 ${originalRequest._retry}/${MAX_RETRY}`)
+      
+      await new Promise(r => setTimeout(r, delay))
       return apiClient(originalRequest)
     }
     
     // 网络错误重试失败后
     if (!error.response) {
       console.error('[Network] 连接失败，重试次数已用尽')
-      // 检查是否在错误页面
-      const isErrorPage = !window.location.protocol.startsWith('http')
-      if (isErrorPage) {
-        console.log('[Network] 检测到错误页面，延迟恢复...')
-        setTimeout(() => {
-          if (window.location.protocol.startsWith('http')) {
-            window.location.reload()
-          }
-        }, 3000)
-      } else {
-        // 正常页面，只显示提示，不跳转
-        showErrorMessage('网络连接不稳定，请稍后重试')
-      }
+      showErrorMessage('网络连接不稳定，请稍后重试')
       return Promise.reject(error)
     }
     
@@ -119,7 +117,6 @@ apiClient.interceptors.response.use(
       // 如果是刷新接口 401，说明 token 完全失效
       if (isRefreshRequest) {
         console.log('[Auth] Token 刷新失败，需要重新登录')
-        // 不自动跳转，让用户手动刷新
         showErrorMessage('登录已过期，请刷新页面重新登录')
         return Promise.reject(error)
       }
@@ -187,6 +184,19 @@ apiClient.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 全局网络状态监听
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    console.log('[Network] 网络已恢复')
+    showToast('网络已恢复', 'success')
+  })
+  
+  window.addEventListener('offline', () => {
+    console.log('[Network] 网络已断开')
+    showToast('网络连接已断开，请检查网络设置', 'error')
+  })
+}
 
 // 日报相关API
 export const dailyApi = {
@@ -775,7 +785,10 @@ export const planApi = {
 // 对话API
 export const chatApi = {
   chat: async (message: string) => {
-    const res = await apiClient.post('/api/agent/chat', { message })
+    // Chat API 单独设置 60 秒超时（原 30 秒不够）
+    const res = await apiClient.post('/api/agent/chat', { message }, {
+      timeout: 60000
+    })
     return res.data as { response: string }
   },
 }
