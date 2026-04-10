@@ -294,11 +294,28 @@ export default function PlansPage() {
 
   // 初始化Luckysheet
   useEffect(() => {
-    if (previewVersion && previewHtml && !isLoadingPreview) {
+    if (previewVersion && previewHtml === 'ready' && !isLoadingPreview) {
       try {
-        const data = JSON.parse(previewHtml)
+        const dataStr = localStorage.getItem('luckysheet_data')
+        if (!dataStr) {
+          console.error('No luckysheet data found')
+          return
+        }
+        
+        const data = JSON.parse(dataStr)
+        console.log('Initializing Luckysheet with data:', data)
+        
         // @ts-ignore
         if (window.luckysheet) {
+          // 先销毁旧实例
+          try {
+            // @ts-ignore
+            luckysheet.destroy()
+          } catch (e) {
+            // 忽略销毁错误
+          }
+          
+          // 创建新实例
           // @ts-ignore
           luckysheet.create({
             container: 'luckysheet-preview',
@@ -312,12 +329,15 @@ export default function PlansPage() {
             showConfigWindowResize: false,
             forceCalculation: false
           })
+          
+          console.log('Luckysheet initialized successfully')
         } else {
           console.error('Luckysheet not loaded')
           alert('Luckysheet未加载，请刷新页面重试')
         }
       } catch (e) {
         console.error('Failed to init luckysheet:', e)
+        alert('初始化失败，请重试')
       }
     }
   }, [previewVersion, previewHtml, isLoadingPreview])
@@ -327,9 +347,14 @@ export default function PlansPage() {
     return () => {
       // @ts-ignore
       if (window.luckysheet) {
-        // @ts-ignore
-        luckysheet.destroy()
+        try {
+          // @ts-ignore
+          luckysheet.destroy()
+        } catch (e) {
+          // 忽略错误
+        }
       }
+      localStorage.removeItem('luckysheet_data')
     }
   }, [])
 
