@@ -85,7 +85,9 @@ export default function PlansPage() {
   const [compareVersions, setCompareVersions] = useState<[number | null, number | null]>([null, null])
   const [compareResult, setCompareResult] = useState<CompareResult | null>(null)
   const [isComparing, setIsComparing] = useState(false)
-  const [noVersionToCompare, setNoVersionToCompare] = useState(false)
+  const [previewVersion, setPreviewVersion] = useState<any>(null)
+  const [previewHtml, setPreviewHtml] = useState<string>('')
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
 
   useEffect(() => {
     loadProjects()
