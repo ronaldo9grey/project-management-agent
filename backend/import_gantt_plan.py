@@ -111,10 +111,12 @@ def import_tasks(project_id: int, tasks: list, version: str = "2"):
             WHERE project_id::integer = :project_id
         """), {"project_id": project_id})
         
-        # 3. 插入新任务
+        # 3. 插入新任务（修复日期格式）
         imported_count = 0
         for task in tasks:
-            task_id = f"{project_id}_{task['task_num'].replace('.', '_')}_V{version}"
+            # 使用任务编号作为task_id（如 1.1 -> 20_1_1_V2）
+            task_num = task['task_num'].replace('.', '_')
+            task_id = f"{project_id}_{task_num}_V{version}"
             
             # 检查是否已存在
             exists = conn.execute(text("""
@@ -122,13 +124,17 @@ def import_tasks(project_id: int, tasks: list, version: str = "2"):
             """), {"task_id": task_id}).fetchone()
             
             if not exists:
+                # 打印调试信息
+                if imported_count < 3:
+                    print(f"插入任务: {task_id}, 名称: {task['task_name']}, 开始: {task['start_date']}, 结束: {task['end_date']}")
+                
                 conn.execute(text("""
                     INSERT INTO project_tasks 
                     (task_id, project_id, task_name, start_date, end_date, 
-                     planned_hours, status, is_latest, progress)
+                     planned_hours, status, is_latest, progress, is_deleted)
                     VALUES 
                     (:task_id, :project_id, :task_name, :start_date, :end_date,
-                     :planned_hours, '未开始', true, 0)
+                     :planned_hours, '未开始', true, 0, false)
                 """), {
                     "task_id": task_id,
                     "project_id": str(project_id),
@@ -153,7 +159,7 @@ def import_tasks(project_id: int, tasks: list, version: str = "2"):
             "version_number": version_number,
             "version_name": version_name,
             "description": "从甘特图格式 Excel 导入",
-            "file_name": "imported_gantt.xlsx",
+            "file_name": "隆林铝厂空压站进度表.xlsx",
             "task_count": imported_count
         })
         
