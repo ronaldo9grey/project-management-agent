@@ -60,6 +60,9 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 # ============== 数据库连接池（单例） ==============
 from .database import get_engine, get_connection, text, dispose_engine
 
+# ============== 缓存管理（带 TTL） ==============
+from .cache import cache_manager, store_user_token, get_user_token, get_user_info_cache
+
 # ============== 定时任务 ==============
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -93,8 +96,6 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/agent/auth/login")
 
-# 当前用户缓存（简化版，生产环境用Redis）
-_current_user_cache: Dict[str, Dict] = {}
 
 def verify_token(token: str) -> Optional[Dict]:
     """验证JWT token"""
@@ -115,9 +116,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # 检查缓存
-    if token in _current_user_cache:
-        return _current_user_cache[token]
+    # 检查缓存（使用 cache_manager）
+    cached_user = cache_manager.get_current_user(token)
+    if cached_user:
+        return cached_user
 
     payload = verify_token(token)
     if payload is None:
@@ -126,8 +128,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
     # 获取用户信息，补充 employee_id
     username = payload.get("sub")
     if username:
-        # 优先从内存缓存获取
-        user_info = _user_info_storage.get(username)
+        # 优先从缓存获取
+        user_info = get_user_info_cache(username)
         
         # 如果缓存没有，从数据库查询
         if not user_info:
@@ -149,7 +151,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
                             "position": result[3]
                         }
                         # 存入缓存
-                        _user_info_storage[username] = user_info
+                        cache_manager.store_user_info(username, user_info)
             except Exception as e:
                 print(f"[Auth] 从数据库获取用户信息失败: {e}")
         
@@ -163,8 +165,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
     if "employee_id" not in payload:
         payload["employee_id"] = username  # 使用 username 作为 employee_id
 
-    # 缓存用户信息
-    _current_user_cache[token] = payload
+    # 缓存用户信息（使用 cache_manager）
+    cache_manager.store_current_user(token, payload)
     return payload
 
 async def get_user_info(token: str) -> Dict:
@@ -1328,23 +1330,6 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         print(f"登录失败: {e}")
         raise HTTPException(status_code=500, detail="登录服务异常")
 
-# 全局token存储（简化版，生产环境用Redis）
-_token_storage: Dict[str, str] = {}
-_user_info_storage: Dict[str, Dict] = {}
-
-def store_user_token(username: str, token: str, user_info: Dict = None):
-    """存储用户token和信息"""
-    _token_storage[username] = token
-    if user_info:
-        _user_info_storage[username] = user_info
-
-def get_user_token(username: str) -> Optional[str]:
-    """获取用户token"""
-    return _token_storage.get(username)
-
-def get_user_info_cache(username: str) -> Optional[Dict]:
-    """获取用户信息缓存"""
-    return _user_info_storage.get(username)
 
 @app.get("/api/agent/auth/me")
 async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
@@ -3172,7 +3157,7 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
         if not user_info:
             user_info = await get_user_info(token)
             if user_info:
-                _user_info_storage[username] = user_info
+                cache_manager.store_user_info(username, user_info)
 
         # 使用用户token获取项目列表，并过滤
         projects = await get_projects_with_auth(token, user_info)
