@@ -133,7 +133,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
                 from dotenv import load_dotenv
                 load_dotenv()
                 
-                db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+                db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
                 engine = create_engine(db_url)
                 
                 with engine.connect() as conn:
@@ -186,7 +186,7 @@ async def get_user_info(token: str) -> Dict:
             from dotenv import load_dotenv
             load_dotenv()
             
-            db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+            db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
             engine = create_engine(db_url)
             
             employee_id = user_data.get("employee_id") or user_data.get("username")
@@ -218,7 +218,7 @@ async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dic
     from dotenv import load_dotenv
     load_dotenv()
 
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     engine = create_engine(db_url)
 
     with engine.connect() as conn:
@@ -278,6 +278,51 @@ async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dic
             })
 
         print(f"返回项目数: {len(projects)}")
+        return projects
+
+async def get_all_projects_for_matching() -> List[Dict]:
+    """获取所有项目用于日报匹配（不受权限限制）"""
+    from sqlalchemy import create_engine, text
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
+    engine = create_engine(db_url)
+
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT id, name, leader, status FROM projects
+            WHERE is_deleted = false ORDER BY id
+        """))
+
+        projects = []
+        for row in result:
+            project_id = row[0]
+            try:
+                task_stats = conn.execute(text("""
+                    SELECT
+                        COUNT(*) as total_tasks,
+                        SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_tasks,
+                        AVG(progress) as avg_progress
+                    FROM project_tasks
+                    WHERE project_id::integer = :pid
+                      AND is_deleted = false
+                      AND is_latest = true
+                """), {"pid": project_id})
+                ts = task_stats.fetchone()
+                progress = round((ts[1] / ts[0] * 100 + float(ts[2] or 0)) / 2, 1) if ts and ts[0] else 0
+            except:
+                progress = 0
+
+            projects.append({
+                "id": project_id,
+                "name": row[1],
+                "leader": row[2],
+                "status": row[3] or "进行中",
+                "progress": progress
+            })
+
+        print(f"[日报匹配] 返回所有项目数: {len(projects)}")
         return projects
 
 async def get_tasks_with_auth(project_id: int, token: str) -> List[Dict]:
@@ -892,14 +937,8 @@ async def smart_parse_daily(
         if not token:
             raise HTTPException(status_code=401, detail="未找到用户认证信息")
 
-        # 获取项目列表
-        user_info = get_user_info_cache(username)
-        if not user_info:
-            user_info = await get_user_info(token)
-            if user_info:
-                _user_info_storage[username] = user_info
-
-        projects = await get_projects_with_auth(token, user_info)
+        # 获取所有项目用于匹配（不受权限限制，任何人都可以参与任何项目）
+        projects = await get_all_projects_for_matching()
 
         # 使用本地智能解析函数（调用 DeepSeek API）
         print(f"[智能解析] 开始解析: {request.text[:50]}...")
@@ -987,7 +1026,7 @@ async def create_daily_report(
         import json
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         username = current_user.get("username") or current_user.get("sub")
@@ -1069,6 +1108,34 @@ async def create_daily_report(
                         "rid": report_id
                     })
                     conn.commit()
+            
+            # 更新工作项的时间字段（从 ai_parsed_data 中读取）
+            if report_id and request.ai_parsed_data:
+                entries = request.ai_parsed_data.get('entries', [])
+                if entries:
+                    with engine.connect() as conn:
+                        # 获取该日报的所有工作项
+                        work_items_result = conn.execute(text("""
+                            SELECT id FROM daily_work_items 
+                            WHERE report_id = :rid 
+                            ORDER BY id
+                        """), {"rid": report_id})
+                        work_item_ids = [row[0] for row in work_items_result.fetchall()]
+                        
+                        # 按顺序更新时间
+                        for idx, entry in enumerate(entries):
+                            if idx < len(work_item_ids) and entry.get('start_time') and entry.get('end_time'):
+                                conn.execute(text("""
+                                    UPDATE daily_work_items 
+                                    SET start_time = :start_time, end_time = :end_time
+                                    WHERE id = :wid
+                                """), {
+                                    "start_time": entry['start_time'],
+                                    "end_time": entry['end_time'],
+                                    "wid": work_item_ids[idx]
+                                })
+                        conn.commit()
+                        print(f"[日报创建] 已更新 {min(len(entries), len(work_item_ids))} 个工作项的时间字段")
 
             # 更新任务进度
             try:
@@ -1119,7 +1186,7 @@ async def get_my_daily_reports(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         username = current_user.get("username") or current_user.get("sub")
@@ -1312,7 +1379,7 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -1349,34 +1416,59 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
 @app.post("/api/agent/auth/refresh")
 async def refresh_token(current_user: Dict = Depends(get_current_user)):
     """
-    刷新 Token - 延长有效期
+    刷新 Token - 调用现有后端获取新 token
     
     前端检测到 token 即将过期时自动调用
     """
     try:
-        username = current_user.get("username")
+        username = current_user.get("username") or current_user.get("sub")
         
         # 从存储中获取当前 token
         current_token = get_user_token(username)
         if not current_token:
             raise HTTPException(status_code=401, detail="未找到登录状态")
         
-        # 获取用户信息
+        # 调用现有后端的 refresh 接口获取新 token
+        try:
+            response = await http_client.post(
+                f"{settings.BACKEND_API_URL}/api/v1/auth/refresh",
+                headers={"Authorization": f"Bearer {current_token}"},
+                timeout=10.0
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                new_token = data.get("data", {}).get("access_token") or data.get("access_token")
+                
+                if new_token:
+                    # 更新本地缓存的 token
+                    store_user_token(username, new_token)
+                    
+                    # 获取用户信息
+                    user_info = await get_user_info(new_token)
+                    
+                    return {
+                        "access_token": new_token,
+                        "token_type": "bearer",
+                        "user": {
+                            "id": user_info.get("employee_id"),
+                            "name": user_info.get("name"),
+                            "username": username,
+                            "role_id": user_info.get("role_id")
+                        }
+                    }
+                else:
+                    print(f"[Auth] 刷新返回数据格式异常: {data}")
+            else:
+                print(f"[Auth] 刷新失败，状态码: {response.status_code}")
+                # 如果现有后端返回 401，说明 token 完全失效，需要重新登录
+                if response.status_code == 401:
+                    raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
+        except httpx.HTTPError as e:
+            print(f"[Auth] 调用现有后端刷新接口失败: {e}")
+        
+        # 如果刷新失败，尝试返回当前 token（降级处理）
         user_info = await get_user_info(current_token)
-        
-        # 生成新 token（调用现有后端刷新接口，或使用当前 token 续期）
-        # 方案：使用当前有效 token 换取新 token
-        # 这里我们代理到现有后端的 refresh 接口（如果有的话）
-        # 如果没有，则直接返回新签发的 token
-        
-        # 由于现有后端可能不支持 refresh，我们采用简化方案：
-        # 检查当前 token 是否仍然有效，有效则返回它（相当于延长会话）
-        # 同时更新本地缓存时间
-        
-        # 实际上，我们只需要重新生成一个新 token 给前端
-        # 但由于 token 是现有后端签发的，我们不能自己签发
-        # 所以这里的策略是：返回当前 token，前端更新本地时间
-        
         return {
             "access_token": current_token,
             "token_type": "bearer",
@@ -1418,7 +1510,7 @@ async def update_push_token(
         class PushTokenRequest(BaseModel):
             push_token: str
         
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
         
         username = current_user.get("username")
@@ -1446,7 +1538,7 @@ def require_role(allowed_roles: List[str]):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -1501,7 +1593,7 @@ async def get_work_hours_stats(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -1614,7 +1706,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -1845,7 +1937,7 @@ async def get_risk_alerts(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -1969,7 +2061,7 @@ async def get_my_project_risks(current_user: Dict = Depends(get_current_user)):
     from dotenv import load_dotenv
     load_dotenv()
 
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     engine = create_engine(db_url)
 
     with engine.connect() as conn:
@@ -2094,7 +2186,7 @@ async def get_team_work_hours(current_user: Dict = Depends(get_current_user)):
     from dotenv import load_dotenv
     load_dotenv()
 
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     engine = create_engine(db_url)
 
     # 获取本月第一天和最后一天
@@ -2199,7 +2291,7 @@ async def get_project_board(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -2272,7 +2364,7 @@ async def get_risk_matrix(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -2347,7 +2439,7 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -2536,7 +2628,7 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -2768,7 +2860,7 @@ async def get_hours_trend(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -2848,7 +2940,7 @@ async def get_project_distribution(current_user: Dict = Depends(get_current_user
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -2904,7 +2996,7 @@ async def get_project_risk_radar(
     from dotenv import load_dotenv
     load_dotenv()
 
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     engine = create_engine(db_url)
 
     today = datetime.now().date()
@@ -3099,7 +3191,7 @@ async def update_project_task_status(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         tasks = get_latest_version_tasks(project_id)
@@ -3196,7 +3288,7 @@ async def get_project_detail(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         # 从数据库直接查询项目信息
@@ -3358,7 +3450,7 @@ async def get_project_tasks(
     from dotenv import load_dotenv
     load_dotenv()
 
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     engine = create_engine(db_url)
 
     with engine.connect() as conn:
@@ -3710,7 +3802,7 @@ def get_db_engine():
         from sqlalchemy import create_engine
         from dotenv import load_dotenv
         load_dotenv()
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         _db_engine = create_engine(db_url)
     return _db_engine
 
@@ -3938,7 +4030,7 @@ async def generate_weekly_report(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -4199,7 +4291,7 @@ async def get_my_notifications(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -4259,7 +4351,7 @@ async def mark_notification_read(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -4290,7 +4382,7 @@ async def mark_all_notifications_read(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -4328,7 +4420,7 @@ async def generate_smart_notifications(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         today = datetime.now().date()
@@ -4591,7 +4683,7 @@ async def upload_document(
 
         # 插入数据库（使用原生 psycopg2 绕过 SQLAlchemy text() 的类型转换限制）
         import psycopg2
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
 
@@ -4685,7 +4777,7 @@ async def search_documents(request: Dict, current_user: Dict = Depends(get_curre
 
     try:
         import psycopg2
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
 
         results = []
 
@@ -5924,7 +6016,7 @@ async def delete_document_api(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         with engine.connect() as conn:
@@ -5987,7 +6079,7 @@ async def get_dashboard_projects_api(
         from dotenv import load_dotenv
         load_dotenv()
         
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
         
         with engine.connect() as conn:
@@ -6149,7 +6241,7 @@ async def get_dashboard_alerts_api(
         from dotenv import load_dotenv
         load_dotenv()
 
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         sql = """
@@ -6283,7 +6375,7 @@ async def get_ai_insight_api(
         from datetime import date
 
         load_dotenv()
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
 
         # 检查今日是否已生成
@@ -6329,7 +6421,7 @@ async def generate_ai_insight() -> str:
     from datetime import date
     
     load_dotenv()
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     engine = create_engine(db_url)
     
     with engine.connect() as conn:
@@ -6720,7 +6812,7 @@ async def get_cost_types(
 # 数据库连接辅助函数
 def get_db():
     from sqlalchemy import create_engine
-    db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+    db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
     return create_engine(db_url)
 
 @app.get("/api/agent/weekly-reports")
@@ -6735,7 +6827,7 @@ async def get_weekly_reports(
     """
     try:
         from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
         
         # 获取当前用户
@@ -6830,7 +6922,7 @@ async def generate_weekly_report(
         week_end = request.get("week_end", str(last_sunday.date()))
         
         from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
         
         with engine.connect() as conn:
@@ -7036,7 +7128,7 @@ async def get_weekly_report_detail(
     """
     try:
         from sqlalchemy import create_engine, text
-        db_url = os.getenv("DATABASE_URL", "os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/project_cost_tracking")")
+        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
         engine = create_engine(db_url)
         
         with engine.connect() as conn:

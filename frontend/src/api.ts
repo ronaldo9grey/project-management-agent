@@ -1,6 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
 import { useAppStore } from './store'
 import { showToast } from './components/Toast'
+import { isTokenExpiringSoon } from './utils/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/agent-api'
 
@@ -20,6 +21,9 @@ export const apiClient = axios.create({
 // Token 刷新相关
 let isRefreshing = false
 let refreshSubscribers: Array<(token: string) => void> = []
+let lastRefreshToken: string | null = null  // 记录上次刷新的 token
+let refreshAttempts = 0  // 刷新尝试次数
+const MAX_REFRESH_ATTEMPTS = 3  // 最大刷新尝试次数
 
 function subscribeTokenRefresh(callback: (token: string) => void) {
   refreshSubscribers.push(callback)
@@ -30,29 +34,6 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = []
 }
 
-// 检查 token 是否即将过期（提前 30 分钟刷新）
-function isTokenExpiringSoon(): boolean {
-  const storage = localStorage.getItem('project-agent-storage')
-  if (!storage) return false
-  
-  try {
-    const data = JSON.parse(storage)
-    const token = data.state?.token
-    if (!token) return false
-    
-    // 解析 JWT payload（不验证签名，只看时间）
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    const exp = payload.exp * 1000 // 转毫秒
-    const now = Date.now()
-    const thirtyMinutes = 30 * 60 * 1000
-    
-    // 如果 30 分钟内过期，返回 true
-    return (exp - now) < thirtyMinutes
-  } catch {
-    return false
-  }
-}
-
 // 请求拦截器 - 添加token + 自动刷新
 apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   const token = useAppStore.getState().token
@@ -61,19 +42,33 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
     
     // 检查是否需要刷新 token（排除刷新接口本身）
     if (!config.url?.includes('/auth/refresh') && !config.url?.includes('/auth/login') && isTokenExpiringSoon()) {
+      // 检查刷新尝试次数
+      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+        console.log('[Auth] 刷新尝试次数过多，跳过自动刷新')
+        return config
+      }
+      
       try {
         const res = await axios.post(`${API_BASE_URL}/api/agent/auth/refresh`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         })
         const newToken = res.data.access_token
         if (newToken) {
-          // 更新 store 和 localStorage
-          useAppStore.getState().setToken(newToken)
-          config.headers.Authorization = `Bearer ${newToken}`
-          console.log('[Auth] Token 自动刷新成功')
+          // 检查 token 是否真的变化了
+          if (newToken !== lastRefreshToken) {
+            // 更新 store 和 localStorage
+            useAppStore.getState().setToken(newToken)
+            config.headers.Authorization = `Bearer ${newToken}`
+            lastRefreshToken = newToken
+            refreshAttempts = 0  // 重置刷新尝试次数
+            console.log('[Auth] Token 自动刷新成功')
+          } else {
+            console.log('[Auth] Token 刷新后未变化')
+          }
         }
       } catch (e) {
         console.warn('[Auth] Token 刷新失败，继续使用当前 token', e)
+        refreshAttempts++  // 增加刷新尝试次数
       }
     }
   }
@@ -81,8 +76,7 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
 })
 
 // 响应拦截器 - 处理错误 + 请求重试
-const BASE_PATH = '/agent'
-const MAX_RETRY = 1
+const MAX_RETRY = 3  // 增加重试次数
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
@@ -93,17 +87,54 @@ apiClient.interceptors.response.use(
     const isLoginRequest = error.config?.url?.includes('/auth/login')
     const isRefreshRequest = error.config?.url?.includes('/auth/refresh')
     
+    // 网络错误（ERR_CONNECTION_RESET 等）优先重试
+    if (!error.response && (originalRequest._retry === undefined || originalRequest._retry < MAX_RETRY)) {
+      originalRequest._retry = (originalRequest._retry || 0) + 1
+      console.log(`[Network] 连接失败，重试 ${originalRequest._retry}/${MAX_RETRY}`, error.message)
+      await new Promise(r => setTimeout(r, 1500)) // 等待 1.5 秒
+      return apiClient(originalRequest)
+    }
+    
+    // 网络错误重试失败后
+    if (!error.response) {
+      console.error('[Network] 连接失败，重试次数已用尽')
+      // 检查是否在错误页面
+      const isErrorPage = !window.location.protocol.startsWith('http')
+      if (isErrorPage) {
+        console.log('[Network] 检测到错误页面，延迟恢复...')
+        setTimeout(() => {
+          if (window.location.protocol.startsWith('http')) {
+            window.location.reload()
+          }
+        }, 3000)
+      } else {
+        // 正常页面，只显示提示，不跳转
+        showErrorMessage('网络连接不稳定，请稍后重试')
+      }
+      return Promise.reject(error)
+    }
+    
+    // 401 认证错误处理
     if (error.response?.status === 401 && !isLoginRequest) {
-      // 如果是刷新接口 401，直接登出
+      // 如果是刷新接口 401，说明 token 完全失效
       if (isRefreshRequest) {
-        useAppStore.getState().logout()
-        window.location.href = `${BASE_PATH}/login`
+        console.log('[Auth] Token 刷新失败，需要重新登录')
+        // 不自动跳转，让用户手动刷新
+        showErrorMessage('登录已过期，请刷新页面重新登录')
+        return Promise.reject(error)
+      }
+      
+      // 检查刷新尝试次数
+      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
+        console.log('[Auth] 刷新尝试次数过多，停止重试')
+        showErrorMessage('登录已过期，请刷新页面重新登录')
         return Promise.reject(error)
       }
       
       // 尝试刷新 token
       if (!isRefreshing) {
         isRefreshing = true
+        refreshAttempts++  // 增加刷新尝试次数
         try {
           const token = useAppStore.getState().token
           const res = await axios.post(`${API_BASE_URL}/api/agent/auth/refresh`, {}, {
@@ -111,9 +142,21 @@ apiClient.interceptors.response.use(
           })
           const newToken = res.data.access_token
           if (newToken) {
+            // 检查 token 是否真的变化了
+            if (newToken === lastRefreshToken) {
+              console.log('[Auth] Token 未变化，刷新无效')
+              showErrorMessage('登录已过期，请刷新页面重新登录')
+              isRefreshing = false
+              return Promise.reject(new Error('Token refresh ineffective'))
+            }
+            
+            lastRefreshToken = newToken
             useAppStore.getState().setToken(newToken)
             onTokenRefreshed(newToken)
             isRefreshing = false
+            
+            // 重置刷新尝试次数（成功刷新后）
+            refreshAttempts = 0
             
             // 重试原请求
             originalRequest.headers.Authorization = `Bearer ${newToken}`
@@ -121,8 +164,8 @@ apiClient.interceptors.response.use(
           }
         } catch (refreshError) {
           isRefreshing = false
-          useAppStore.getState().logout()
-          window.location.href = `${BASE_PATH}/login`
+          console.log('[Auth] Token 刷新失败')
+          showErrorMessage('登录已过期，请刷新页面重新登录')
           return Promise.reject(refreshError)
         }
       } else {
@@ -134,19 +177,6 @@ apiClient.interceptors.response.use(
           })
         })
       }
-    }
-    
-    // 网络错误重试
-    if (!error.response && (originalRequest._retry === undefined || originalRequest._retry < MAX_RETRY)) {
-      originalRequest._retry = (originalRequest._retry || 0) + 1
-      console.log(`[Network] 请求失败，重试 ${originalRequest._retry}/${MAX_RETRY}`)
-      await new Promise(r => setTimeout(r, 1000)) // 等待 1 秒
-      return apiClient(originalRequest)
-    }
-    
-    // 网络错误提示（重试失败后）
-    if (!error.response) {
-      showErrorMessage('网络连接失败，请检查网络后刷新页面重试')
     }
     
     // 服务器错误提示
