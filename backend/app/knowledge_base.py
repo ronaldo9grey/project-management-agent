@@ -430,7 +430,8 @@ def get_knowledge_list(
                 conditions.append("doc_type = :dtype")
                 params["dtype"] = doc_type
             
-            where_clause = " AND ".join(conditions)
+            # 安全构建WHERE子句（条件已通过参数化验证）
+            where_clause = " AND ".join(conditions) if conditions else "1=1"
             
             result = conn.execute(text(f"""
                 SELECT id, project_id, project_name, doc_name, doc_type,

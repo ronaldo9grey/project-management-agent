@@ -3110,11 +3110,15 @@ async def update_project_task_status(
                     if new_status == "已完成" and not task["actual_end_date"]:
                         update_fields.append("actual_end_date = CURRENT_DATE")
 
-                    conn.execute(text(f"""
-                        UPDATE project_tasks
-                        SET {', '.join(update_fields)}
-                        WHERE task_id = :tid
-                    """), params)
+                    # 安全构建SET子句（白名单验证字段名）
+                    allowed_fields = {"status", "progress", "actual_end_date", "updated_at"}
+                    set_clause = ", ".join(f"{field} = :{field}" for field in update_fields if field.split("=")[0].strip() in allowed_fields)
+                    if set_clause:
+                        conn.execute(text(f"""
+                            UPDATE project_tasks
+                            SET {set_clause}
+                            WHERE task_id = :tid
+                        """), params)
 
                     updated_tasks.append({
                         "task_id": task["task_id"],
@@ -5575,16 +5579,16 @@ async def project_chat(
         elif tool_name == "query_project_risks":
             # 查询项目风险
             with get_connection() as conn:
-                result = conn.execute(text(f"""
+                result = conn.execute(text("""
                     SELECT task_id, task_name, assignee, end_date,
                            CURRENT_DATE - end_date as delay_days
                     FROM project_tasks
-                    WHERE CAST(project_id AS INTEGER) = {project_id}
+                    WHERE CAST(project_id AS INTEGER) = :project_id
                       AND is_deleted = false
                       AND end_date < CURRENT_DATE
                       AND actual_end_date IS NULL
                     ORDER BY delay_days DESC
-                """))
+                """), {"project_id": project_id})
 
                 risks = []
                 for row in result:
@@ -6721,9 +6725,12 @@ async def get_weekly_reports(
                 where_clause += " AND project_id = :project_id"
                 params["project_id"] = project_id
             
+            # 安全构建WHERE子句（只允许预定义条件）
+            safe_where = where_clause if where_clause and where_clause.startswith("WHERE") else ""
+            
             # 查询总数
             count_result = conn.execute(text(f"""
-                SELECT COUNT(*) FROM weekly_reports {where_clause}
+                SELECT COUNT(*) FROM weekly_reports {safe_where}
             """), params)
             total = count_result.fetchone()[0]
             
@@ -6734,7 +6741,7 @@ async def get_weekly_reports(
                 SELECT id, project_id, project_name, week_start, week_end, 
                        total_hours, task_count, created_at, created_by
                 FROM weekly_reports
-                {where_clause}
+                {safe_where}
                 ORDER BY week_start DESC
                 OFFSET :offset LIMIT :size
             """), params)

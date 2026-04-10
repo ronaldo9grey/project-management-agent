@@ -324,6 +324,11 @@ def get_or_create_cost_type(cost_type: str, cost_subtype: str, conn) -> Optional
         else:
             return None
         
+        # 白名单验证表名（防止SQL注入）
+        allowed_tables = ["material_types", "labor_types", "outsourcing_types", "indirect_types"]
+        if table not in allowed_tables:
+            return None
+        
         # 查找已有类型
         result = conn.execute(text(f"""
             SELECT id FROM {table} 
