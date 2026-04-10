@@ -204,7 +204,7 @@ export default function PlansPage() {
 
   // Excel预览功能
   const [previewVersion, setPreviewVersion] = useState<any>(null)
-  const [previewHtml, setPreviewHtml] = useState<string>(''  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
+  const [previewHtml, setPreviewHtml] = useState<string>('(')
 
   const handlePreviewExcel = async (version: any) => {
     if (!version.file_name) return alert('该版本没有关联的Excel文件')
@@ -223,7 +223,7 @@ export default function PlansPage() {
       const wb = XLSX.read(data, { type: 'array' })
       const sheet = wb.Sheets[wb.SheetNames[0]]
       const html = XLSX.utils.sheet_to_html(sheet, {
-        header: '<table style="border-collapse:collapse;width:100%;font-size:12px">,
+        header: '<table style="border-collapse:collapse;width:100%;font-size:12px">',
         footer: '</table>'
       }).replace(/<td/g, '<td style="border:1px solid #e5e7eb;padding:4px 8px"')
         .replace(/<th/g, '<th style="border:1px solid #e5e7eb;padding:4px 8px;background:#f3f4f6"')
