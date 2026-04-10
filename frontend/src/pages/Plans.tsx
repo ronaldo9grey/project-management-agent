@@ -4,8 +4,6 @@ import MobileNav from '../components/MobileNav'
 import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store'
 import { plansApi, projectsApi } from '../api'
-import * as XLSX from 'xlsx'
-// import * as XLSX from 'xlsx' // Excel预览功能待完善
 
 interface Project {
   id: number
@@ -203,21 +201,14 @@ export default function PlansPage() {
     }
   }
 
-  // Excel预览功能
-  const [previewVersion, setPreviewVersion] = useState<any>(null)
-  const [previewHtml, setPreviewHtml] = useState<string>('')
-  const [isLoadingPreview, setIsLoadingPreview] = useState(false)
-
+  // Excel预览功能（已移除，改为直接下载）
   const handlePreviewExcel = async (version: any) => {
     if (!version.file_name) {
       alert('该版本没有关联的Excel文件')
       return
     }
     
-    setPreviewVersion(version)
-    setIsLoadingPreview(true)
-    setPreviewHtml('')
-    
+    // 直接下载文件
     try {
       const res = await fetch(`/api/agent/plans/file/${version.id}`, {
         headers: { 'Authorization': `Bearer ${useAppStore.getState().token}` }
@@ -225,138 +216,18 @@ export default function PlansPage() {
       if (!res.ok) throw new Error('文件不存在')
       
       const blob = await res.blob()
-      const data = await blob.arrayBuffer()
-      const wb = XLSX.read(data, { type: 'array' })
-      
-      // 转换为Luckysheet格式
-      const luckysheetData: any[] = []
-      wb.SheetNames.forEach((sheetName: string) => {
-        const sheet = wb.Sheets[sheetName]
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 })
-        
-        // 转换为Luckysheet单元格格式
-        const celldata: any[] = []
-        jsonData.forEach((row: any, rowIndex: number) => {
-          if (Array.isArray(row)) {
-            row.forEach((cell, colIndex: number) => {
-              if (cell !== undefined && cell !== null && cell !== '') {
-                celldata.push({
-                  r: rowIndex,
-                  c: colIndex,
-                  v: { 
-                    v: cell, 
-                    m: String(cell),
-                    ct: { fa: 'General', t: 'g' }
-                  }
-                })
-              }
-            })
-          }
-        })
-        
-        luckysheetData.push({
-          name: sheetName,
-          celldata: celldata,
-          row: Math.max(jsonData.length, 100),
-          column: Math.max((jsonData[0] as any[])?.length || 20, 26)
-        })
-      })
-      
-      // 使用Luckysheet渲染
-      const containerHtml = `
-        <div id="luckysheet-preview" style="width:100%;height:500px;"></div>
-        <script>
-          if (window.luckysheet) {
-            luckysheet.create({
-              container: 'luckysheet-preview',
-              data: ${JSON.stringify(luckysheetData)},
-              showinfobar: false,
-              showsheetbar: true,
-              showstatisticBar: false,
-              enableAddRow: false,
-              enableAddBackTop: false,
-              userInfo: false,
-              showConfigWindowResize: false,
-              forceCalculation: false
-            });
-          }
-        </script>
-      `
-      
-      setPreviewHtml(containerHtml)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = version.file_name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
     } catch (e: any) {
-      alert(`预览失败: ${e.message}`)
-      setPreviewVersion(null)
-    } finally {
-      setIsLoadingPreview(false)
+      alert(`下载失败: ${e.message}`)
     }
   }
-
-  // 初始化Luckysheet
-  useEffect(() => {
-    if (previewVersion && previewHtml === 'ready' && !isLoadingPreview) {
-      try {
-        const dataStr = localStorage.getItem('luckysheet_data')
-        if (!dataStr) {
-          console.error('No luckysheet data found')
-          return
-        }
-        
-        const data = JSON.parse(dataStr)
-        console.log('Initializing Luckysheet with data:', data)
-        
-        // @ts-ignore
-        if (window.luckysheet) {
-          // 先销毁旧实例
-          try {
-            // @ts-ignore
-            luckysheet.destroy()
-          } catch (e) {
-            // 忽略销毁错误
-          }
-          
-          // 创建新实例
-          // @ts-ignore
-          luckysheet.create({
-            container: 'luckysheet-preview',
-            data: data,
-            showinfobar: false,
-            showsheetbar: true,
-            showstatisticBar: false,
-            enableAddRow: false,
-            enableAddBackTop: false,
-            userInfo: false,
-            showConfigWindowResize: false,
-            forceCalculation: false
-          })
-          
-          console.log('Luckysheet initialized successfully')
-        } else {
-          console.error('Luckysheet not loaded')
-          alert('Luckysheet未加载，请刷新页面重试')
-        }
-      } catch (e) {
-        console.error('Failed to init luckysheet:', e)
-        alert('初始化失败，请重试')
-      }
-    }
-  }, [previewVersion, previewHtml, isLoadingPreview])
-
-  // 清理Luckysheet
-  useEffect(() => {
-    return () => {
-      // @ts-ignore
-      if (window.luckysheet) {
-        try {
-          // @ts-ignore
-          luckysheet.destroy()
-        } catch (e) {
-          // 忽略错误
-        }
-      }
-      localStorage.removeItem('luckysheet_data')
-    }
-  }, [])
 
   const handleLogout = () => {
     logout()
@@ -822,26 +693,7 @@ export default function PlansPage() {
 
 
       {/* Excel预览模态框 */}
-      {previewVersion && (
-        <div className="modal-overlay" onClick={() => setPreviewVersion(null)}>
-          <div className="modal-content" style={{ maxWidth: '90%', width: '1200px', maxHeight: '90vh' }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h3 className="modal-title">📊 Excel预览 - {previewVersion.file_name}</h3>
-              <button className="modal-close" onClick={() => setPreviewVersion(null)}>×</button>
-            </div>
-            <div className="modal-body" style={{ height: '600px', overflow: 'hidden' }}>
-              {isLoadingPreview ? (
-                <div className="empty-state" style={{ padding: '40px' }}>
-                  <span className="spinner"></span>
-                  <p className="mt-4 text-gray-500">正在加载Excel...</p>
-                </div>
-              ) : (
-                <div id="luckysheet-preview" style={{ width: '100%', height: '100%' }}></div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* 移动端底部导航 */}
       <MobileNav active="projects" />
