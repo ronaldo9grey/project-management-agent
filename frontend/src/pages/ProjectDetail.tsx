@@ -821,7 +821,7 @@ export default function ProjectDetailPage() {
             <h2 className="card-title">📋 项目计划</h2>
             <div className="flex items-center gap-3">
               <span className="text-sm text-gray-500">{(tasks || []).length} 个任务</span>
-              <Link to="/plans" className="btn btn-secondary btn-sm">
+              <Link to={`/plans?project_id=${project?.id}`} className="btn btn-secondary btn-sm">
                 上传计划
               </Link>
             </div>

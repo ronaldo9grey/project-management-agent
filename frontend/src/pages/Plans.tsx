@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { redirectToLogin } from '../utils/auth'
 import MobileNav from '../components/MobileNav'
 import { useState, useEffect, useRef } from 'react'
@@ -61,6 +61,8 @@ interface CompareResult {
 
 export default function PlansPage() {
   const { user, logout } = useAppStore()
+  const [searchParams] = useSearchParams()
+  const projectIdFromUrl = searchParams.get('project_id')
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
@@ -134,7 +136,17 @@ export default function PlansPage() {
       const result = await projectsApi.getList()
       setProjects(result)
       if (result.length > 0) {
-        setSelectedProject(result[0])
+        // 如果 URL 有 project_id 参数，优先选中该项目
+        if (projectIdFromUrl) {
+          const targetProject = result.find((p: Project) => String(p.id) === projectIdFromUrl)
+          if (targetProject) {
+            setSelectedProject(targetProject)
+          } else {
+            setSelectedProject(result[0])
+          }
+        } else {
+          setSelectedProject(result[0])
+        }
       }
     } catch (error) {
       console.error('加载项目列表失败:', error)
