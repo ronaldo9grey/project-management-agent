@@ -36,7 +36,7 @@ def calc_health_score(project_id: int) -> Dict:
     - risk_score: 风险得分
     - details: 详细数据
     """
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         # 获取项目基础数据
         project = conn.execute(text("""
             SELECT id, name, progress, 
@@ -134,7 +134,7 @@ def save_health_snapshot(project_id: int) -> bool:
     if not score_data:
         return False
     
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         # 获取任务统计
         task_stats = conn.execute(text("""
             WITH latest_version AS (
@@ -210,7 +210,7 @@ def detect_alerts(project_id: int) -> List[Dict]:
     """
     alerts = []
     
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         # 获取项目信息
         project = conn.execute(text("""
             SELECT id, name, leader_id, progress,
@@ -413,7 +413,7 @@ def save_alerts(project_id: int, alerts: List[Dict]) -> bool:
     if not alerts:
         return True
     
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         for alert in alerts:
             # 先删除同类型的未解决预警，再插入新的
             conn.execute(text("""
@@ -450,7 +450,7 @@ def save_alerts(project_id: int, alerts: List[Dict]) -> bool:
 
 def run_daily_alert_detection():
     """每日预警检测任务（推送到微信群组）"""
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         # 获取所有进行中的项目
         projects = conn.execute(text("""
             SELECT id, name FROM projects 
@@ -494,7 +494,7 @@ def get_dashboard_overview(role: str = "admin", user_id: int = None) -> Dict:
     role: admin/user/viewer
     user_id: 用户ID（用于个性化数据）
     """
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         # 基础统计
         stats = conn.execute(text("""
             SELECT 
@@ -581,7 +581,7 @@ def get_dashboard_overview(role: str = "admin", user_id: int = None) -> Dict:
 
 def get_project_health_trend(project_id: int, days: int = 30) -> Dict:
     """获取项目健康度趋势"""
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         snapshots = conn.execute(text("""
             SELECT 
                 snapshot_date, health_score, progress_score, cost_score, risk_score,
@@ -614,7 +614,7 @@ def get_project_health_trend(project_id: int, days: int = 30) -> Dict:
 
 def get_alert_rules() -> List[Dict]:
     """获取预警规则配置"""
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         rules = conn.execute(text("""
             SELECT id, alert_type, alert_name, enabled, thresholds, description
             FROM alert_rules
@@ -633,7 +633,7 @@ def get_alert_rules() -> List[Dict]:
 
 def update_alert_rule(rule_id: int, enabled: bool = None, thresholds: Dict = None) -> bool:
     """更新预警规则"""
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         if enabled is not None:
             conn.execute(text("""
                 UPDATE alert_rules SET enabled = :enabled, updated_at = NOW()
@@ -652,7 +652,7 @@ def update_alert_rule(rule_id: int, enabled: bool = None, thresholds: Dict = Non
 
 def resolve_alert(alert_id: int, resolved_by: int) -> bool:
     """标记预警已处理"""
-    with engine.connect() as conn:
+    with _get_engine().connect() as conn:
         conn.execute(text("""
             UPDATE project_alerts 
             SET is_resolved = true, resolved_at = NOW(), resolved_by = :user_id

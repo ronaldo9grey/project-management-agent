@@ -13,6 +13,7 @@ from typing import Generator, Optional
 from contextlib import contextmanager
 from sqlalchemy import create_engine, text, Engine
 from sqlalchemy.engine import Connection
+from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -23,6 +24,7 @@ class DatabaseManager:
     
     _instance: Optional['DatabaseManager'] = None
     _engine: Optional[Engine] = None
+    _session_factory: Optional[sessionmaker] = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -51,13 +53,23 @@ class DatabaseManager:
                     "connect_timeout": 5,  # 连接超时 5 秒
                 }
             )
+            self._session_factory = sessionmaker(bind=self._engine)
             print(f"[Database] 连接池已初始化: pool_size=10, max_overflow=20")
         
         return self._engine
     
+    def get_session(self) -> Session:
+        """获取数据库会话"""
+        if self._session_factory is None:
+            self.get_engine()
+        return self._session_factory()
+    
     def get_connection(self) -> Connection:
         """获取数据库连接"""
-        return self.get_engine().connect()
+        engine = self.get_engine()
+        if engine is None:
+            raise RuntimeError("Database engine not initialized")
+        return engine.connect()
     
     @contextmanager
     def connect(self) -> Generator[Connection, None, None]:
@@ -73,6 +85,7 @@ class DatabaseManager:
         if self._engine is not None:
             self._engine.dispose()
             self._engine = None
+            self._session_factory = None
             print("[Database] 连接池已释放")
     
     def test_connection(self) -> bool:
@@ -96,15 +109,30 @@ def get_engine() -> Engine:
     return db_manager.get_engine()
 
 
+def get_session() -> Session:
+    """获取数据库会话"""
+    return db_manager.get_session()
+
+
 def get_db() -> Generator[Connection, None, None]:
     """依赖注入：获取数据库连接（FastAPI Depends）"""
     with db_manager.connect() as conn:
         yield conn
 
 
+def get_db_connection() -> Connection:
+    """
+    直接获取数据库连接（非上下文管理器）
+    
+    注意：调用者需要手动关闭连接！
+    推荐使用 with get_connection_context() as conn: 代替
+    """
+    return db_manager.get_connection()
+
+
 @contextmanager
 def get_connection() -> Generator[Connection, None, None]:
-    """上下文管理器：获取数据库连接"""
+    """上下文管理器：获取数据库连接（推荐方式）"""
     with db_manager.connect() as conn:
         yield conn
 
@@ -118,7 +146,9 @@ def dispose_engine():
 __all__ = [
     'db_manager',
     'get_engine',
+    'get_session',
     'get_db',
+    'get_db_connection',
     'get_connection',
     'dispose_engine',
     'text',
