@@ -4566,7 +4566,9 @@ async def upload_document(
 
         # 插入数据库（使用原生 psycopg2 绕过 SQLAlchemy text() 的类型转换限制）
         import psycopg2
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            raise RuntimeError("DATABASE_URL environment variable not set")
         conn = psycopg2.connect(db_url)
         cursor = conn.cursor()
 
@@ -4660,7 +4662,9 @@ async def search_documents(request: Dict, current_user: Dict = Depends(get_curre
 
     try:
         import psycopg2
-        db_url = os.getenv("DATABASE_URL", "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking")
+        db_url = os.getenv("DATABASE_URL")
+        if not db_url:
+            raise RuntimeError("DATABASE_URL environment variable not set")
 
         results = []
 

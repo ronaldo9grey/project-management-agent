@@ -34,9 +34,11 @@ class DatabaseManager:
         if self._engine is None:
             db_url = os.getenv("DATABASE_URL")
             if not db_url:
-                # 开发环境默认值（生产环境必须设置环境变量）
-                db_url = "postgresql://yjydb:qv52A03xcxAQCoDglUJelm4Sb@localhost:5432/project_cost_tracking"
-                print("[Database] 警告：使用默认数据库连接，生产环境请设置 DATABASE_URL 环境变量")
+                raise RuntimeError(
+                    "DATABASE_URL environment variable not set.\n"
+                    "Please create a .env file with DATABASE_URL or set it in environment.\n"
+                    "Example: DATABASE_URL=postgresql://user:password@localhost:5432/dbname"
+                )
             
             self._engine = create_engine(
                 db_url,
