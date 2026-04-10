@@ -226,10 +226,23 @@ export default function PlansPage() {
       
       const blob = await res.blob()
       const data = await blob.arrayBuffer()
-      const wb = XLSX.read(data, { type: 'array' })
+      const wb = XLSX.read(data, { type: 'array', cellStyles: true })
       const sheet = wb.Sheets[wb.SheetNames[0]]
-      const html = XLSX.utils.sheet_to_html(sheet)
-      setPreviewHtml(html)
+      
+      // 生成更美观的HTML表格
+      const html = XLSX.utils.sheet_to_html(sheet, {
+        editable: false,
+        header: '<table style="border-collapse:collapse;width:100%;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">',
+        footer: '</table>'
+      })
+      
+      // 美化表格样式
+      const styledHtml = html
+        .replace(/<td/g, '<td style="border:1px solid #d1d5db;padding:8px 12px;text-align:left;vertical-align:top"')
+        .replace(/<th/g, '<th style="border:1px solid #d1d5db;padding:8px 12px;background:#f3f4f6;font-weight:600;text-align:left"')
+        .replace(/<table/, '<table style="border-collapse:collapse;width:100%"')
+      
+      setPreviewHtml(styledHtml)
     } catch (e: any) {
       alert(`预览失败: ${e.message}`)
       setPreviewVersion(null)
