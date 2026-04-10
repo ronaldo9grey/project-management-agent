@@ -261,14 +261,20 @@ def detect_alerts(project_id: int) -> List[Dict]:
                 "responsible_users": [project[2]] if project[2] else []
             })
         
-        # 2. 沉默预警
+        # 2. 沉默预警 - 改用 project_name 模糊匹配
+        # 获取项目名称
+        project_name = project[1] if project else ""
+        
         last_report = conn.execute(text("""
             SELECT MAX(dr.report_date) as last_date
             FROM daily_reports dr
             JOIN daily_work_items dwi ON dwi.report_id = dr.id
-            JOIN project_tasks pt ON pt.task_id = dwi.task_id
-            WHERE pt.project_id::integer = :pid
-        """), {"pid": project_id}).fetchone()
+            WHERE dwi.project_name LIKE :project_name_pattern
+               OR dwi.project_id::text = :project_id_str
+        """), {
+            "project_name_pattern": f"%{project_name[:10]}%",  # 模糊匹配项目名前10个字符
+            "project_id_str": str(project_id)
+        }).fetchone()
         
         if last_report and last_report[0]:
             silent_days = (today - last_report[0]).days

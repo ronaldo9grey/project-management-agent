@@ -5971,14 +5971,41 @@ async def get_dashboard_projects_api(
             for p in projects:
                 project_id = p[0]
                 
+                # 获取项目的最新版本任务（用于计算进度）
+                tasks = conn.execute(text("""
+                    SELECT 
+                        task_id, task_name, start_date, end_date, 
+                        actual_end_date, progress, status
+                    FROM project_tasks
+                    WHERE project_id = :pid
+                    AND is_latest = true
+                    AND is_deleted = false
+                    AND end_date IS NOT NULL
+                    ORDER BY end_date DESC
+                """), {"pid": str(project_id)}).fetchall()
+                
+                # 确定项目结束时间：优先用项目 end_date，否则取最后一个任务的结束时间
+                project_start_date = p[5]
+                project_end_date = p[6]
+                
+                if not project_end_date and tasks:
+                    # 取最后一个任务的结束时间
+                    latest_task = tasks[0]  # 已按 end_date DESC 排序
+                    project_end_date = latest_task[3]  # end_date
+                
+                # 确定项目开始时间：优先用项目 start_date，否则取第一个任务的开始时间
+                if not project_start_date and tasks:
+                    # 找最早的任务开始时间
+                    task_starts = [t[2] for t in tasks if t[2]]
+                    if task_starts:
+                        project_start_date = min(task_starts)
+                
                 # 计算计划进度（基于时间：已过天数/总天数）
-                start_date = p[5]
-                end_date = p[6]
                 today = datetime.now().date()
                 
-                if start_date and end_date:
-                    start = datetime.strptime(str(start_date), '%Y-%m-%d').date() if isinstance(start_date, str) else start_date
-                    end = datetime.strptime(str(end_date), '%Y-%m-%d').date() if isinstance(end_date, str) else end_date
+                if project_start_date and project_end_date:
+                    start = datetime.strptime(str(project_start_date), '%Y-%m-%d').date() if isinstance(project_start_date, str) else project_start_date
+                    end = datetime.strptime(str(project_end_date), '%Y-%m-%d').date() if isinstance(project_end_date, str) else project_end_date
                     
                     if today <= start:
                         planned_progress = 0.0
@@ -5991,23 +6018,9 @@ async def get_dashboard_projects_api(
                 else:
                     planned_progress = 0.0
                 
-                # 获取项目的最新版本任务
-                tasks = conn.execute(text("""
-                    SELECT 
-                        task_id, task_name, start_date, end_date, 
-                        actual_end_date, progress, status
-                    FROM project_tasks
-                    WHERE project_id = :pid
-                    AND is_latest = true
-                    AND end_date IS NOT NULL
-                    ORDER BY end_date
-                    LIMIT 10
-                """), {"pid": str(project_id)}).fetchall()
-                
                 # 计算实际进度（按任务工期天数计算）
-                # 已完成：计入完整工期，延期：计入50%工期，进行中：按进度计
+                # 与计划进度保持一致的时间维度
                 total_tasks = len(tasks)
-                today = datetime.now().date()
                 
                 if total_tasks > 0:
                     total_work_days = 0
@@ -6020,9 +6033,9 @@ async def get_dashboard_projects_api(
                         
                         # 计算任务工期（天）
                         if task_start and task_end:
-                            start = task_start if isinstance(task_start, type(today)) else datetime.strptime(str(task_start), '%Y-%m-%d').date()
-                            end = task_end if isinstance(task_end, type(today)) else datetime.strptime(str(task_end), '%Y-%m-%d').date()
-                            work_days = max((end - start).days, 1)  # 至少1天
+                            start_dt = task_start if isinstance(task_start, type(today)) else datetime.strptime(str(task_start), '%Y-%m-%d').date()
+                            end_dt = task_end if isinstance(task_end, type(today)) else datetime.strptime(str(task_end), '%Y-%m-%d').date()
+                            work_days = max((end_dt - start_dt).days, 1)  # 至少1天
                         else:
                             work_days = 5  # 默认5天
                         
@@ -6040,7 +6053,11 @@ async def get_dashboard_projects_api(
                     
                     actual_progress = round(completed_work_days / total_work_days * 100, 1) if total_work_days > 0 else 0
                 else:
+                    # 无任务时，使用项目进度字段
                     actual_progress = float(p[4] or 0)
+                
+                # 取前10个任务用于显示
+                display_tasks = tasks[:10] if len(tasks) > 10 else tasks
                 
                 # 获取项目预警
                 alerts = conn.execute(text("""
@@ -6065,8 +6082,8 @@ async def get_dashboard_projects_api(
                     "progress": float(p[4] or 0),
                     "planned_progress": planned_progress,
                     "actual_progress": actual_progress,
-                    "start_date": str(p[5]) if p[5] else None,
-                    "end_date": str(p[6]) if p[6] else None,
+                    "start_date": str(project_start_date) if project_start_date else None,
+                    "end_date": str(project_end_date) if project_end_date else None,
                     "contract_amount": float(p[7] or 0),
                     "budget_total_cost": float(p[8] or 0),
                     "actual_total_cost": float(p[9] or 0),
@@ -6078,7 +6095,7 @@ async def get_dashboard_projects_api(
                         "actual_end_date": str(t[4]) if t[4] else None,
                         "progress": float(t[5] or 0),
                         "status": t[6]
-                    } for t in tasks],
+                    } for t in display_tasks],
                     "alerts": [{
                         "type": a[0],
                         "severity": a[1],
