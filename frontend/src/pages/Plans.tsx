@@ -414,23 +414,14 @@ export default function PlansPage() {
                                 {v.is_current && (
                                   <span className="tag tag-success">当前版本</span>
                                 )}
-                              </div>
-                              <div className="flex items-center gap-2 mt-1 text-sm text-gray-500 flex-wrap">
-                                <span>版本号: {v.version_number}</span>
-                                <span className="hidden sm:inline">•</span>
-                                <span>{v.task_count} 个任务</span>
                                 {v.file_name && (
                                   <>
                                     <span className="hidden sm:inline">•</span>
                                     <span 
-                                      className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 cursor-pointer transition-colors"
+                                      className="text-blue-600 hover:text-blue-800 cursor-pointer text-sm underline"
                                       onClick={() => handlePreviewExcel(v)}
-                                      title="点击预览Excel文件"
                                     >
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
-                                      <span className="underline decoration-dotted hover:decoration-solid">{v.file_name}</span>
+                                      {v.file_name}
                                     </span>
                                   </>
                                 )}
