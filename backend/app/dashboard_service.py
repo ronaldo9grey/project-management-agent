@@ -3,7 +3,10 @@
 独立功能，不影响其他模块
 """
 
-from .database import get_engine, text
+try:
+    from .database import get_engine, text
+except ImportError:
+    from database import get_engine, text
 from typing import List, Dict, Optional, Any
 from datetime import datetime, date, timedelta
 from decimal import Decimal

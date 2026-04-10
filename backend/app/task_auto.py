@@ -6,7 +6,11 @@ import json
 import re
 from datetime import date, datetime
 from typing import Optional, Dict, List, Tuple
-from .database import get_engine, text
+try:
+    from .database import get_engine, text
+except ImportError:
+    # 当直接导入时使用绝对导入
+    from database import get_engine, text
 import httpx
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")

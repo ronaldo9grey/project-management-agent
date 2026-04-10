@@ -248,7 +248,10 @@ def push_morning_alerts():
         print("非工作时间，跳过推送")
         return False
     
-    from .database import get_engine, text
+    try:
+        from .database import get_engine, text
+    except ImportError:
+        from database import get_engine, text
     import os
     
     from collections import defaultdict
@@ -375,7 +378,10 @@ def push_afternoon_reminder():
         print("非工作时间，跳过推送")
         return False
     
-    from .database import get_engine, text
+    try:
+        from .database import get_engine, text
+    except ImportError:
+        from database import get_engine, text
     import os
     
     from datetime import datetime, date

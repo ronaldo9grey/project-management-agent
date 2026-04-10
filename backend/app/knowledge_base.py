@@ -12,7 +12,10 @@ import json
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 import httpx
-from .database import get_engine, text
+try:
+    from .database import get_engine, text
+except ImportError:
+    from database import get_engine, text
 
 import PyPDF2
 from docx import Document

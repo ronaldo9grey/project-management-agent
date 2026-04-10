@@ -7,7 +7,10 @@
 import os
 import asyncio
 from datetime import datetime
-from .database import get_engine, text
+try:
+    from .database import get_engine, text
+except ImportError:
+    from database import get_engine, text
 
 import httpx
 
