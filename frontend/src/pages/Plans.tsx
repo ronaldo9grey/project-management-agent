@@ -226,23 +226,64 @@ export default function PlansPage() {
       
       const blob = await res.blob()
       const data = await blob.arrayBuffer()
-      const wb = XLSX.read(data, { type: 'array', cellStyles: true })
-      const sheet = wb.Sheets[wb.SheetNames[0]]
+      const wb = XLSX.read(data, { type: 'array' })
       
-      // 生成更美观的HTML表格
-      const html = XLSX.utils.sheet_to_html(sheet, {
-        editable: false,
-        header: '<table style="border-collapse:collapse;width:100%;font-size:13px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif">',
-        footer: '</table>'
+      // 转换为Luckysheet格式
+      const luckysheetData: any[] = []
+      wb.SheetNames.forEach((sheetName: string) => {
+        const sheet = wb.Sheets[sheetName]
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 })
+        
+        // 转换为Luckysheet单元格格式
+        const celldata: any[] = []
+        jsonData.forEach((row: any, rowIndex: number) => {
+          if (Array.isArray(row)) {
+            row.forEach((cell, colIndex: number) => {
+              if (cell !== undefined && cell !== null && cell !== '') {
+                celldata.push({
+                  r: rowIndex,
+                  c: colIndex,
+                  v: { 
+                    v: cell, 
+                    m: String(cell),
+                    ct: { fa: 'General', t: 'g' }
+                  }
+                })
+              }
+            })
+          }
+        })
+        
+        luckysheetData.push({
+          name: sheetName,
+          celldata: celldata,
+          row: Math.max(jsonData.length, 100),
+          column: Math.max(jsonData[0]?.length || 20, 26)
+        })
       })
       
-      // 美化表格样式
-      const styledHtml = html
-        .replace(/<td/g, '<td style="border:1px solid #d1d5db;padding:8px 12px;text-align:left;vertical-align:top"')
-        .replace(/<th/g, '<th style="border:1px solid #d1d5db;padding:8px 12px;background:#f3f4f6;font-weight:600;text-align:left"')
-        .replace(/<table/, '<table style="border-collapse:collapse;width:100%"')
+      // 使用Luckysheet渲染
+      const containerHtml = `
+        <div id="luckysheet-preview" style="width:100%;height:500px;"></div>
+        <script>
+          if (window.luckysheet) {
+            luckysheet.create({
+              container: 'luckysheet-preview',
+              data: ${JSON.stringify(luckysheetData)},
+              showinfobar: false,
+              showsheetbar: true,
+              showstatisticBar: false,
+              enableAddRow: false,
+              enableAddBackTop: false,
+              userInfo: false,
+              showConfigWindowResize: false,
+              forceCalculation: false
+            });
+          }
+        </script>
+      `
       
-      setPreviewHtml(styledHtml)
+      setPreviewHtml(containerHtml)
     } catch (e: any) {
       alert(`预览失败: ${e.message}`)
       setPreviewVersion(null)
@@ -722,7 +763,7 @@ export default function PlansPage() {
               <h3 className="modal-title">📊 Excel预览 - {previewVersion.file_name}</h3>
               <button className="modal-close" onClick={() => setPreviewVersion(null)}>×</button>
             </div>
-            <div className="modal-body" style={{ maxHeight: '75vh', overflow: 'auto' }}>
+            <div className="modal-body" style={{ maxHeight: '75vh', overflow: 'hidden' }}>
               {isLoadingPreview ? (
                 <div className="empty-state" style={{ padding: '40px' }}>
                   <span className="spinner"></span>
