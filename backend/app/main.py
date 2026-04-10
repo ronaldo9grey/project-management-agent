@@ -7065,3 +7065,36 @@ async def get_weekly_report_detail(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=3000)
+
+
+# ============== Excel文件下载接口 ==============
+
+@app.get("/api/agent/plans/file/{version_id}")
+async def download_plan_file(version_id: int, current_user: Dict = Depends(get_current_user)):
+    """
+    下载/预览计划Excel文件
+    
+    返回文件流供前端SheetJS解析
+    """
+    with get_connection() as conn:
+        result = conn.execute(text("""
+            SELECT file_name, file_path 
+            FROM project_plan_versions 
+            WHERE id = :version_id
+        """), {"version_id": version_id}).fetchone()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="版本不存在")
+        
+        file_name = result[0]
+        file_path = result[1]
+        
+        if not file_path or not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="文件不存在或已删除")
+        
+        from fastapi.responses import FileResponse
+        return FileResponse(
+            path=file_path,
+            filename=file_name,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
