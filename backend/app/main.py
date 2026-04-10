@@ -1,7 +1,7 @@
 # 项目管理智能体 - 后端服务
 # FastAPI + LangChain/LangGraph + DeepSeek
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -10,17 +10,27 @@ import os
 from datetime import datetime, timedelta
 import httpx
 import asyncio
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # LangChain imports
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
+# API限流配置
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(
     title="项目管理智能体",
     description="基于LangChain/LangGraph的项目管理AI服务",
     version="0.1.0"
 )
+
+# 添加限流处理器
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS配置
 # ============== API限流配置 ==============
