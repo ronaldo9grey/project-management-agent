@@ -259,6 +259,21 @@ export default function PlansPage() {
 
       {/* 主内容 */}
       <main className="content-wrapper">
+        {/* 返回按钮 */}
+        {projectIdFromUrl && (
+          <div className="mb-4">
+            <Link 
+              to={`/projects/${projectIdFromUrl}`} 
+              className="inline-flex items-center gap-2 text-primary hover:underline"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              返回项目详情
+            </Link>
+          </div>
+        )}
+        
         {/* 标题 */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">📁 项目计划管理</h1>

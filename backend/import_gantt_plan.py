@@ -104,7 +104,14 @@ def import_tasks(project_id: int, tasks: list, version: str = "2"):
             WHERE project_id::integer = :project_id AND is_latest = true
         """), {"project_id": project_id})
         
-        # 2. 插入新任务
+        # 2. 将旧版本记录设为非当前
+        conn.execute(text("""
+            UPDATE project_plan_versions 
+            SET is_current = false 
+            WHERE project_id::integer = :project_id
+        """), {"project_id": project_id})
+        
+        # 3. 插入新任务
         imported_count = 0
         for task in tasks:
             task_id = f"{project_id}_{task['task_num'].replace('.', '_')}_V{version}"
@@ -131,6 +138,24 @@ def import_tasks(project_id: int, tasks: list, version: str = "2"):
                     "planned_hours": task['duration'] * 8  # 假设每天8小时
                 })
                 imported_count += 1
+        
+        # 4. 创建版本记录
+        version_number = f"{version}.0"
+        version_name = f"V{version}"
+        
+        conn.execute(text("""
+            INSERT INTO project_plan_versions 
+            (project_id, version_number, version_name, description, upload_by, file_name, is_current, task_count)
+            VALUES 
+            (:project_id, :version_number, :version_name, :description, '0001', :file_name, true, :task_count)
+        """), {
+            "project_id": str(project_id),
+            "version_number": version_number,
+            "version_name": version_name,
+            "description": "从甘特图格式 Excel 导入",
+            "file_name": "imported_gantt.xlsx",
+            "task_count": imported_count
+        })
         
         conn.commit()
         
