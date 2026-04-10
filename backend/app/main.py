@@ -23,6 +23,20 @@ app = FastAPI(
 )
 
 # CORS配置
+# ============== API限流配置 ==============
+limiter = Limiter(key_func=get_remote_address)
+
+# ============== FastAPI应用 ==============
+app = FastAPI(
+    title="项目智能体API",
+    description="项目管理智能助手后端服务",
+    version="1.0.0"
+)
+
+# 添加限流处理器
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -1264,7 +1278,8 @@ async def get_my_daily_reports(
         return {"items": [], "total": 0, "page": page, "size": size}
 
 @app.post("/api/agent/auth/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@limiter.limit("5/minute")  # 防暴力破解：每分钟最多5次
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
     """
     登录接口 - 代理到现有后端认证
 
