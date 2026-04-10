@@ -25,10 +25,15 @@ app = FastAPI(
 # CORS配置
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://yjypro.online",      # 生产环境
+        "http://localhost:5173",      # 本地开发
+        "http://127.0.0.1:5173",      # 本地开发（IP）
+        "https://open.feishu.cn",     # 飞书机器人回调
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
 # 加载环境变量
