@@ -8,6 +8,7 @@ import PlansPage from './pages/Plans'
 import ChatPage from './pages/Chat'
 import NotificationsPage from './pages/Notifications'
 import WeeklyReportPage from './pages/WeeklyReport'
+import TrackingPage from './pages/Tracking'
 import LoginPage from './pages/Login'
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
@@ -53,6 +54,7 @@ function ProtectedRoutes() {
       <Route path="/chat" element={<ChatPage />} />
       <Route path="/notifications" element={<NotificationsPage />} />
       <Route path="/report" element={<WeeklyReportPage />} />
+      <Route path="/tracking" element={<TrackingPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

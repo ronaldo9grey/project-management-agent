@@ -5956,6 +5956,87 @@ async def delete_document_api(
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
 
+# ============== 项目追踪 API（三视图）===============
+
+@app.get("/api/agent/tracking/execution")
+async def get_tracking_execution(
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    追踪-执行视图：任务驱动
+    
+    返回：
+    - 我的任务（今日/本周/本月）
+    - 进行中任务
+    - 近期完成
+    """
+    try:
+        from .tracking_service import get_execution_view
+        
+        user_id = current_user.get("employee_id", "")
+        user_name = current_user.get("name", "")
+        role_id = current_user.get("role_id", 0)
+        
+        data = get_execution_view(user_id, user_name, role_id)
+        
+        return {"code": 200, "data": data}
+    except Exception as e:
+        logger.exception(f"获取执行视图失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@app.get("/api/agent/tracking/health")
+async def get_tracking_health(
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    追踪-健康视图：风险雷达
+    
+    返回：
+    - 五维度风险雷达
+    - 高风险项目 TOP5
+    - 趋势预警
+    """
+    try:
+        from .tracking_service import get_health_view
+        
+        user_id = current_user.get("employee_id", "")
+        role_id = current_user.get("role_id", 0)
+        
+        data = get_health_view(user_id, role_id)
+        
+        return {"code": 200, "data": data}
+    except Exception as e:
+        logger.exception(f"获取健康视图失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@app.get("/api/agent/tracking/trace")
+async def get_tracking_trace(
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    追踪-溯源视图：数据血缘
+    
+    返回：
+    - 关联率统计
+    - 项目关联排行
+    - 不可追溯项目
+    """
+    try:
+        from .tracking_service import get_trace_view
+        
+        user_id = current_user.get("employee_id", "")
+        role_id = current_user.get("role_id", 0)
+        
+        data = get_trace_view(user_id, role_id)
+        
+        return {"code": 200, "data": data}
+    except Exception as e:
+        logger.exception(f"获取溯源视图失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
 # ============== 公共看板 API（独立模块）===============
 
 @app.get("/api/agent/dashboard/overview")
