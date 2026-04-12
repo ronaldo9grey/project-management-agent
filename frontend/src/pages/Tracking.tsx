@@ -905,7 +905,7 @@ export default function TrackingPage() {
                       alignItems: 'center',
                       gap: 6
                     }}>
-                      📊 项目关联排行
+                      📊 项目关联排行（按关联率从高到低）
                     </div>
                     {traceData.projects_trace.slice(0, 5).map((project, idx) => (
                       <div key={project.project_id} style={{

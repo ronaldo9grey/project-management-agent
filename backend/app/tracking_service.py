@@ -418,22 +418,27 @@ def get_trace_view(user_id: str, role_id: int) -> Dict[str, Any]:
             stage = "高级"
         
         # ===== 2. 项目关联率排行 =====
+        # 按关联率降序排列（好的在前），排除无日报的项目
+        # 注意：只关联未删除的项目
         project_link_query = """
+            WITH active_projects AS (
+                SELECT DISTINCT ON (name) id, name, progress
+                FROM projects
+                WHERE is_deleted = false AND status = '进行中'
+                ORDER BY name, id
+            )
             SELECT 
-                p.id, p.name, p.progress,
+                ap.id, ap.name, ap.progress,
                 COUNT(DISTINCT dwi.id) as total_reports,
                 COUNT(DISTINCT CASE WHEN dwi.task_id IS NOT NULL AND dwi.task_id != '' THEN dwi.id END) as linked_reports
-            FROM projects p
-            LEFT JOIN daily_work_items dwi ON dwi.project_name = p.name
-            LEFT JOIN daily_reports dr ON dwi.report_id = dr.id
+            FROM active_projects ap
+            JOIN daily_work_items dwi ON dwi.project_name = ap.name
+            JOIN daily_reports dr ON dwi.report_id = dr.id
                 AND dr.report_date >= CURRENT_DATE - INTERVAL '30 days'
-            WHERE p.is_deleted = false AND p.status = '进行中'
-            GROUP BY p.id, p.name, p.progress
+            GROUP BY ap.id, ap.name, ap.progress
+            HAVING COUNT(DISTINCT dwi.id) > 0
             ORDER BY 
-                CASE WHEN COUNT(DISTINCT dwi.id) > 0 
-                    THEN COUNT(CASE WHEN dwi.task_id IS NOT NULL AND dwi.task_id != '' THEN 1 END) * 100.0 / COUNT(DISTINCT dwi.id)
-                    ELSE 0 
-                END ASC
+                (COUNT(CASE WHEN dwi.task_id IS NOT NULL AND dwi.task_id != '' THEN 1 END) * 100.0 / COUNT(DISTINCT dwi.id)) DESC NULLS LAST
             LIMIT 10
         """
         project_links = conn.execute(text(project_link_query)).fetchall()
@@ -466,16 +471,21 @@ def get_trace_view(user_id: str, role_id: int) -> Dict[str, Any]:
                 untraceable_projects.append(project_data)
         
         # ===== 3. 进度无支撑项目 =====
+        # 使用CTE避免重复项目
         no_support_query = """
-            SELECT p.id, p.name, p.progress, p.leader
-            FROM projects p
-            WHERE p.is_deleted = false
-              AND p.status = '进行中'
-              AND p.progress > 0
+            WITH active_projects AS (
+                SELECT DISTINCT ON (name) id, name, progress, leader
+                FROM projects
+                WHERE is_deleted = false AND status = '进行中'
+                ORDER BY name, id
+            )
+            SELECT ap.id, ap.name, ap.progress, ap.leader
+            FROM active_projects ap
+            WHERE ap.progress > 0
               AND NOT EXISTS (
                   SELECT 1 FROM daily_work_items dwi
                   JOIN daily_reports dr ON dwi.report_id = dr.id
-                  WHERE dwi.project_name = p.name
+                  WHERE dwi.project_name = ap.name
                     AND dr.report_date >= CURRENT_DATE - INTERVAL '30 days'
               )
         """
