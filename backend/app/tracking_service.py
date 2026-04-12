@@ -419,7 +419,7 @@ def get_trace_view(user_id: str, role_id: int) -> Dict[str, Any]:
         
         # ===== 2. 项目关联率排行 =====
         # 按关联率降序排列（好的在前），排除无日报的项目
-        # 注意：只关联未删除的项目
+        # 注意：只关联未删除的项目，并返回具体工作项
         project_link_query = """
             WITH active_projects AS (
                 SELECT DISTINCT ON (name) id, name, progress
@@ -455,13 +455,40 @@ def get_trace_view(user_id: str, role_id: int) -> Dict[str, Any]:
             else:
                 rate = 0
             
+            # 获取该项目的具体工作项
+            work_items_query = """
+                SELECT 
+                    dwi.id,
+                    dwi.work_content,
+                    dwi.task_id,
+                    dr.report_date,
+                    dr.employee_name
+                FROM daily_work_items dwi
+                JOIN daily_reports dr ON dwi.report_id = dr.id
+                WHERE dwi.project_name = :project_name
+                  AND dr.report_date >= CURRENT_DATE - INTERVAL '30 days'
+                ORDER BY dr.report_date DESC
+                LIMIT 10
+            """
+            work_items_result = conn.execute(text(work_items_query), {"project_name": p[1]}).fetchall()
+            
+            work_items = [{
+                "id": w[0],
+                "work_content": w[1],
+                "task_id": w[2],
+                "report_date": str(w[3]),
+                "employee_name": w[4],
+                "is_linked": bool(w[2] and w[2].strip())
+            } for w in work_items_result]
+            
             project_data = {
                 "project_id": p[0],
                 "project_name": p[1],
                 "progress": float(p[2] or 0),
                 "total_reports": total_r,
                 "linked_reports": linked_r,
-                "link_rate": rate
+                "link_rate": rate,
+                "work_items": work_items
             }
             
             projects_trace.append(project_data)

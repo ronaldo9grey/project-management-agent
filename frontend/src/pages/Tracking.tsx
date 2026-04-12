@@ -161,6 +161,15 @@ interface HealthData {
 }
 
 // 溯源视图数据
+interface WorkItem {
+  id: number
+  work_content: string
+  task_id: string
+  report_date: string
+  employee_name: string
+  is_linked: boolean
+}
+
 interface TraceProject {
   project_id: number
   project_name: string
@@ -168,6 +177,7 @@ interface TraceProject {
   total_reports: number
   linked_reports: number
   link_rate: number
+  work_items?: WorkItem[]
 }
 
 interface TraceData {
@@ -195,6 +205,7 @@ export default function TrackingPage() {
   const [traceData, setTraceData] = useState<TraceData | null>(null)
   const [loading, setLoading] = useState(false)
   const [tipsModal, setTipsModal] = useState<{title: string; content: string} | null>(null)
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     loadData()
@@ -287,6 +298,19 @@ export default function TrackingPage() {
       ℹ️
     </button>
   )
+
+  // 切换项目展开状态
+  const toggleProjectExpand = (projectId: number) => {
+    setExpandedProjects(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(projectId)) {
+        newSet.delete(projectId)
+      } else {
+        newSet.add(projectId)
+      }
+      return newSet
+    })
+  }
 
   return (
     <div className="page-container" style={{ paddingBottom: 80 }}>
@@ -905,60 +929,129 @@ export default function TrackingPage() {
                       alignItems: 'center',
                       gap: 6
                     }}>
-                      📊 项目关联排行（按关联率从高到低）
+                      📊 日报关联排行（点击展开详情）
                     </div>
-                    {traceData.projects_trace.slice(0, 5).map((project, idx) => (
-                      <div key={project.project_id} style={{
-                        background: 'white',
-                        borderRadius: 10,
-                        padding: 12,
-                        marginBottom: 6,
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{
-                              width: 20,
-                              height: 20,
-                              borderRadius: '50%',
-                              background: project.link_rate >= 80 ? '#22c55e' : project.link_rate >= 50 ? '#f59e0b' : '#94a3b8',
-                              color: 'white',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 11,
-                              fontWeight: 600
-                            }}>{idx + 1}</span>
-                            <span style={{ fontWeight: 500, fontSize: 13 }}>{project.project_name}</span>
-                          </div>
-                          <span style={{
-                            fontSize: 12,
-                            fontWeight: 600,
-                            color: project.link_rate >= 80 ? '#22c55e' : project.link_rate >= 50 ? '#f59e0b' : '#94a3b8'
-                          }}>
-                            {project.link_rate}%
-                          </span>
-                        </div>
-                        <div style={{
-                          marginTop: 6,
-                          height: 4,
-                          background: '#e2e8f0',
-                          borderRadius: 2,
+                    {traceData.projects_trace.slice(0, 5).map((project, idx) => {
+                      const isExpanded = expandedProjects.has(project.project_id)
+                      return (
+                        <div key={project.project_id} style={{
+                          background: 'white',
+                          borderRadius: 10,
+                          marginBottom: 8,
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
                           overflow: 'hidden'
                         }}>
+                          {/* 项目标题行 */}
+                          <div 
+                            onClick={() => toggleProjectExpand(project.project_id)}
+                            style={{
+                              padding: 12,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              transition: 'background 0.2s'
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: '50%',
+                                background: project.link_rate >= 80 ? '#22c55e' : project.link_rate >= 50 ? '#f59e0b' : '#94a3b8',
+                                color: 'white',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: 11,
+                                fontWeight: 600
+                              }}>{idx + 1}</span>
+                              <span style={{ fontWeight: 500, fontSize: 13 }}>{project.project_name}</span>
+                              <span style={{ fontSize: 12, color: '#64748b' }}>
+                                ({project.linked_reports}/{project.total_reports})
+                              </span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                fontSize: 14,
+                                fontWeight: 600,
+                                color: project.link_rate >= 80 ? '#22c55e' : project.link_rate >= 50 ? '#f59e0b' : '#94a3b8'
+                              }}>
+                                {project.link_rate}%
+                              </span>
+                              <span style={{
+                                fontSize: 12,
+                                color: '#94a3b8',
+                                transition: 'transform 0.2s',
+                                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                              }}>▼</span>
+                            </div>
+                          </div>
+                          
+                          {/* 进度条 */}
                           <div style={{
-                            width: `${Math.max(project.link_rate, 1)}%`,
-                            height: '100%',
-                            background: project.link_rate >= 80 ? '#22c55e' : project.link_rate >= 50 ? '#f59e0b' : '#94a3b8',
+                            padding: '0 12px 12px',
+                            height: 4,
+                            background: '#e2e8f0',
                             borderRadius: 2
-                          }} />
+                          }}>
+                            <div style={{
+                              width: `${Math.max(project.link_rate, 1)}%`,
+                              height: '100%',
+                              background: project.link_rate >= 80 ? '#22c55e' : project.link_rate >= 50 ? '#f59e0b' : '#94a3b8',
+                              borderRadius: 2
+                            }} />
+                          </div>
+                          
+                          {/* 展开的日报详情 */}
+                          {isExpanded && project.work_items && (
+                            <div style={{
+                              background: '#f8fafc',
+                              borderTop: '1px solid #e2e8f0',
+                              padding: 12
+                            }}>
+                              <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                                近期日报工作项：
+                              </div>
+                              {project.work_items.map((item, i) => (
+                                <div key={item.id || i} style={{
+                                  background: item.is_linked ? '#f0fdf4' : '#fef2f2',
+                                  borderRadius: 6,
+                                  padding: '8px 10px',
+                                  marginBottom: 6,
+                                  borderLeft: `3px solid ${item.is_linked ? '#22c55e' : '#ef4444'}`
+                                }}>
+                                  <div style={{ 
+                                    fontSize: 13, 
+                                    fontWeight: 500,
+                                    color: item.is_linked ? '#166534' : '#991b1b'
+                                  }}>
+                                    {item.work_content}
+                                  </div>
+                                  <div style={{ 
+                                    fontSize: 11, 
+                                    color: '#64748b',
+                                    marginTop: 4,
+                                    display: 'flex',
+                                    justifyContent: 'space-between'
+                                  }}>
+                                    <span>👤 {item.employee_name || '未知'}</span>
+                                    <span>📅 {item.report_date}</span>
+                                    <span>
+                                      {item.is_linked ? (
+                                        <span style={{ color: '#22c55e' }}>✅ {item.task_id}</span>
+                                      ) : (
+                                        <span style={{ color: '#ef4444' }}>❌ 未关联</span>
+                                      )}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </>
                 )}
 
