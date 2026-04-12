@@ -15,6 +15,7 @@ from sqlalchemy import create_engine, text, Engine
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import sessionmaker, Session
 from dotenv import load_dotenv
+from app.logger import db_logger
 
 load_dotenv()
 
@@ -54,7 +55,7 @@ class DatabaseManager:
                 }
             )
             self._session_factory = sessionmaker(bind=self._engine)
-            print(f"[Database] 连接池已初始化: pool_size=10, max_overflow=20")
+            db_logger.info("连接池已初始化: pool_size=10, max_overflow=20")
         
         return self._engine
     
@@ -86,7 +87,7 @@ class DatabaseManager:
             self._engine.dispose()
             self._engine = None
             self._session_factory = None
-            print("[Database] 连接池已释放")
+            db_logger.info("连接池已释放")
     
     def test_connection(self) -> bool:
         """测试数据库连接"""
@@ -95,7 +96,7 @@ class DatabaseManager:
                 result = conn.execute(text("SELECT 1")).fetchone()
                 return result is not None
         except Exception as e:
-            print(f"[Database] 连接测试失败: {e}")
+            db_logger.error(f"连接测试失败: {e}")
             return False
 
 

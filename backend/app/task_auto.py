@@ -8,9 +8,12 @@ from datetime import date, datetime
 from typing import Optional, Dict, List, Tuple
 try:
     from .database import get_engine, text
+    from .logger import ai_logger
 except ImportError:
     # 当直接导入时使用绝对导入
     from database import get_engine, text
+    from logger import ai_logger
+
 import httpx
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -127,7 +130,7 @@ async def match_task_by_content_ai(work_content: str, project_id: int, project_n
     try:
         # 直接硬编码 URL，避免环境变量问题
         url = "https://api.deepseek.com/v1/chat/completions"
-        print(f"[AI匹配] 调用 DeepSeek API: {url}")
+        ai_logger.debug(f"调用 DeepSeek API: {url}")
         
         async with httpx.AsyncClient(timeout=15.0) as client:
             response = await client.post(
@@ -165,17 +168,17 @@ async def match_task_by_content_ai(work_content: str, project_id: int, project_n
                         if not task_name:
                             task_name = task_dict[task_id]
                         
-                        print(f"[AI匹配] 成功: '{work_content}' -> {task_id} ({task_name})")
+                        ai_logger.info(f"AI匹配成功: '{work_content}' -> {task_id} ({task_name})")
                         return {"task_id": task_id, "task_name": task_name}
                     
-                print(f"AI 未匹配: '{work_content}'")
+                ai_logger.debug(f"AI未匹配: '{work_content}'")
                 return None
             else:
-                print(f"AI 调用失败: {response.status_code} - {response.text[:200]}")
+                ai_logger.error(f"AI调用失败: {response.status_code} - {response.text[:200]}")
                 return None
             
     except Exception as e:
-        print(f"AI 任务匹配异常: {e}")
+        ai_logger.exception(f"AI任务匹配异常: {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -502,11 +505,11 @@ def update_task_progress_from_daily(work_items: List[Dict]) -> List[str]:
                 
                 conn.commit()
                 updated_tasks.append(task_id)
-                print(f"[进度更新] {task_id} ({task_name}): {current_progress:.1f}% -> {new_progress:.1f}%, 状态: {current_status} -> {new_status}" + 
+                ai_logger.info(f"进度更新: {task_id} ({task_name}): {current_progress:.1f}% -> {new_progress:.1f}%, 状态: {current_status} -> {new_status}" + 
                       (f", 实际完成: {actual_end_date}" if actual_end_date else ""))
                 
         except Exception as e:
-            print(f"更新任务 {task_id} 进度失败: {e}")
+            ai_logger.error(f"更新任务 {task_id} 进度失败: {e}")
             import traceback
             traceback.print_exc()
             continue

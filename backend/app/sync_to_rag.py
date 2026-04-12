@@ -9,10 +9,14 @@ import asyncio
 from datetime import datetime
 try:
     from .database import get_engine, text
+    from .logger import get_logger
 except ImportError:
     from database import get_engine, text
+    from logger import get_logger
 
 import httpx
+
+logger = get_logger(__name__)
 
 
 
@@ -42,7 +46,7 @@ def sync_projects_to_knowledge_base():
     """
     engine = get_db_engine()
     
-    print(f"[同步开始] {datetime.now()}")
+    logger.info(f"同步开始: {datetime.now()}")
     
     with engine.connect() as conn:
         # 1. 获取所有项目
@@ -68,7 +72,7 @@ def sync_projects_to_knowledge_base():
                 "description": row[7]
             })
         
-        print(f"找到 {len(projects)} 个项目")
+        logger.info(f"找到 {len(projects)} 个项目")
         
         # 2. 为每个项目生成知识库文档
         for project in projects:
@@ -120,7 +124,7 @@ def sync_projects_to_knowledge_base():
         
         conn.commit()
     
-    print(f"[同步完成] {datetime.now()}")
+    logger.info(f"同步完成: {datetime.now()}")
     return len(projects)
 
 
@@ -176,4 +180,4 @@ def generate_project_markdown(project: dict, tasks: list) -> str:
 if __name__ == "__main__":
     # 手动执行同步
     count = sync_projects_to_knowledge_base()
-    print(f"已同步 {count} 个项目到知识库")
+    logger.info(f"已同步 {count} 个项目到知识库")

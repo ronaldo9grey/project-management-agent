@@ -89,6 +89,10 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 # ============== 数据库连接池（单例） ==============
 from .database import get_engine, get_connection, text, dispose_engine
 
+# ============== 日志框架 ==============
+from .logger import get_logger
+logger = get_logger(__name__)
+
 # ============== 缓存管理（带 TTL） ==============
 from .cache import cache_manager, store_user_token, get_user_token, get_user_info_cache
 
@@ -104,7 +108,7 @@ async def daily_alert_detection_job():
     try:
         from .dashboard_service import run_daily_alert_detection
         count = run_daily_alert_detection()
-        print(f"[定时任务] 完成 {count} 个项目的预警检测")
+        logger.info(f" 完成 {count} 个项目的预警检测")
 
         # 推送每日摘要到微信
         from .dashboard_service import get_dashboard_overview
@@ -114,7 +118,7 @@ async def daily_alert_detection_job():
         push_daily_summary_to_wechat(overview['stats'])
 
     except Exception as e:
-        print(f"[定时任务] 预警检测失败: {e}")
+        logger.error(f" {e}")
 
 # ============== 认证相关 ==============
 
@@ -182,7 +186,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
                         # 存入缓存
                         cache_manager.store_user_info(username, user_info)
             except Exception as e:
-                print(f"[Auth] 从数据库获取用户信息失败: {e}")
+                logger.error(f" {e}")
         
         if user_info:
             payload["employee_id"] = user_info.get("employee_id", username)
@@ -231,11 +235,11 @@ async def get_user_info(token: str) -> Dict:
                         user_data["phone"] = person_result[3] or ""
                         user_data["email"] = person_result[4] or ""
             
-            print(f"获取用户信息成功: employee_id={user_data.get('employee_id')}, name={user_data.get('name')}, department={user_data.get('department')}, position={user_data.get('position')}")
+            logger.info(f": employee_id={user_data.get('employee_id')}, name={user_data.get('name')}, department={user_data.get('department')}, position={user_data.get('position')}")
             return user_data
         return {}
     except Exception as e:
-        print(f"获取用户信息失败: {e}")
+        logger.error(f" {e}")
         return {}
 
 async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dict]:
@@ -251,14 +255,14 @@ async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dic
 
             # role_id=11 是系统管理员，可以看到所有项目
             if role_id == 11:
-                print("管理员用户，返回所有项目")
+                logger.debug("管理员用户，返回所有项目")
                 result = conn.execute(text("""
                     SELECT id, name, leader, status FROM projects
                     WHERE is_deleted = false ORDER BY id
                 """))
             else:
                 # 其他角色，只查询自己负责的项目
-                print(f"普通用户 {employee_name}，查询负责的项目")
+                logger.debug(f"普通用户 {employee_name}，查询负责的项目")
                 result = conn.execute(text("""
                     SELECT id, name, leader, status FROM projects
                     WHERE is_deleted = false AND leader = :emp_name
@@ -299,7 +303,7 @@ async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dic
                 "progress": progress
             })
 
-        print(f"返回项目数: {len(projects)}")
+        logger.debug(f"返回项目数: {len(projects)}")
         return projects
 
 async def get_all_projects_for_matching() -> List[Dict]:
@@ -340,7 +344,7 @@ async def get_all_projects_for_matching() -> List[Dict]:
                 "progress": progress
             })
 
-        print(f"[日报匹配] 返回所有项目数: {len(projects)}")
+        logger.info(f" 返回所有项目数: {len(projects)}")
         return projects
 
 async def get_tasks_with_auth(project_id: int, token: str) -> List[Dict]:
@@ -359,7 +363,7 @@ async def get_tasks_with_auth(project_id: int, token: str) -> List[Dict]:
             return data
         return []
     except Exception as e:
-        print(f"获取任务列表失败: {e}")
+        logger.error(f" {e}")
         return []
 
 # 全局HTTP客户端（会在 startup/shutdown 中管理）
@@ -427,7 +431,7 @@ async def get_projects_from_backend() -> List[Dict]:
             return data.get("data", {}).get("list", [])
         return []
     except Exception as e:
-        print(f"获取项目列表失败: {e}")
+        logger.error(f" {e}")
         return []
 
 async def get_tasks_from_backend(project_id: int) -> List[Dict]:
@@ -440,7 +444,7 @@ async def get_tasks_from_backend(project_id: int) -> List[Dict]:
             return response.json()
         return []
     except Exception as e:
-        print(f"获取任务列表失败: {e}")
+        logger.error(f" {e}")
         return []
 
 # 缓存项目列表（简化版，生产环境用Redis）
@@ -739,9 +743,9 @@ def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = 
             HumanMessage(content=user_prompt)
         ]
 
-        print(f"[智能解析] 调用 DeepSeek API...")
+        logger.debug(f" 调用 DeepSeek API...")
         response = llm.invoke(messages)
-        print(f"[智能解析] API 返回: {response.content[:200]}...")
+        logger.debug(f" API 返回: {response.content[:200]}...")
 
         # 清理响应内容
         content = response.content.strip()
@@ -757,7 +761,7 @@ def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = 
 
         # 如果没有解析出条目，尝试简单解析
         if not entries:
-            print(f"[智能解析] 未解析出条目，尝试兜底解析...")
+            logger.debug(f" 未解析出条目，尝试兜底解析...")
             entries = simple_parse_fallback(text, projects)
 
         # 先识别共享时间段，再计算工时
@@ -796,7 +800,7 @@ def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = 
         return result
 
     except Exception as e:
-        print(f"[智能解析] 错误: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
 
@@ -959,7 +963,7 @@ async def smart_parse_daily(
         projects = await get_all_projects_for_matching()
 
         # 使用本地智能解析函数（调用 DeepSeek API）
-        print(f"[智能解析] 开始解析: {request.text[:50]}...")
+        logger.debug(f" 开始解析: {request.text[:50]}...")
         parsed = parse_daily_text_smart(request.text, projects, request.report_date)
 
         # 为每个条目匹配任务
@@ -1013,7 +1017,7 @@ async def smart_parse_daily(
         }
 
     except Exception as e:
-        print(f"智能解析错误: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
@@ -1049,7 +1053,7 @@ async def create_daily_report(
 
         # 安全检查：确保 employee_id 存在
         if not employee_id:
-            print(f"[警告] 用户 {username} 缺少 employee_id，使用 username 作为标识")
+            logger.warning(f" 用户 {username} 缺少 employee_id，使用 username 作为标识")
             employee_id = username
 
         if not token:
@@ -1072,7 +1076,7 @@ async def create_daily_report(
             if old_report:
                 # 额外安全检查：确认日报属于当前用户
                 if old_report[1] != employee_id:
-                    print(f"[错误] 日报归属检查失败：期望 {employee_id}，实际 {old_report[1]}")
+                    logger.error(f" 日报归属检查失败：期望 {employee_id}，实际 {old_report[1]}")
                     raise HTTPException(status_code=403, detail="无权删除此日报")
                 
                 # 删除旧日报的工作项
@@ -1086,7 +1090,7 @@ async def create_daily_report(
                 """), {"rid": old_report[0]})
 
                 conn.commit()
-                print(f"[智能体] 已删除 {request.report_date} 的旧日报 (ID: {old_report[0]}, 用户: {old_report[2]})")
+                logger.info(f" 已删除 {request.report_date} 的旧日报 (ID: {old_report[0]}, 用户: {old_report[2]})")
 
         # 调用主后端创建接口
         response = await http_client.post(
@@ -1149,7 +1153,7 @@ async def create_daily_report(
                                     "wid": work_item_ids[idx]
                                 })
                         conn.commit()
-                        print(f"[日报创建] 已更新 {min(len(entries), len(work_item_ids))} 个工作项的时间字段")
+                        logger.info(f" 已更新 {min(len(entries), len(work_item_ids))} 个工作项的时间字段")
 
             # 更新任务进度
             try:
@@ -1158,9 +1162,9 @@ async def create_daily_report(
                 from task_auto import update_task_progress_from_daily
                 updated_tasks = update_task_progress_from_daily(request.work_items)
                 if updated_tasks:
-                    print(f"已更新 {len(updated_tasks)} 个任务进度: {updated_tasks}")
+                    logger.info(f"已更新 {len(updated_tasks)} 个任务进度: {updated_tasks}")
             except Exception as e:
-                print(f"更新任务进度失败（不影响日报保存）: {e}")
+                logger.error(f"更新任务进度失败（不影响日报保存）: {e}")
                 import traceback
                 traceback.print_exc()
 
@@ -1171,7 +1175,7 @@ async def create_daily_report(
                 "updated_tasks": len(updated_tasks) if 'updated_tasks' in locals() else 0
             }
         else:
-            print(f"创建日报失败: {response.status_code} - {response.text}")
+            logger.error(f" {response.status_code} - {response.text}")
             raise HTTPException(
                 status_code=response.status_code,
                 detail=f"创建失败: {response.text}"
@@ -1180,7 +1184,7 @@ async def create_daily_report(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"创建日报异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"创建失败: {str(e)}")
@@ -1282,7 +1286,7 @@ async def get_my_daily_reports(
             }
 
     except Exception as e:
-        print(f"获取日报列表异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         return {"items": [], "total": 0, "page": page, "size": size}
@@ -1309,7 +1313,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
 
         if response.status_code == 200:
             data = response.json()
-            print(f"后端返回: {data}")
+            logger.debug(f"后端返回: {data}")
 
             # 处理不同可能的返回格式
             response_data = data.get("data", data)
@@ -1329,11 +1333,11 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
 
                 # 获取用户详细信息（包含角色）
                 user_info = await get_user_info(token)
-                print(f"用户信息: {user_info}")
+                logger.debug(f"用户信息: {user_info}")
 
                 # 存储用户token和信息用于后续请求
                 store_user_token(user_key, token, user_info)
-                print(f"存储token: key={user_key}")
+                logger.debug(f"存储token: key={user_key}")
 
                 return {
                     "access_token": token,
@@ -1357,7 +1361,7 @@ async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends
     except HTTPException:
         raise
     except Exception as e:
-        print(f"登录失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail="登录服务异常")
 
 
@@ -1398,7 +1402,7 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
 
         return current_user
     except Exception as e:
-        print(f"获取用户信息失败: {e}")
+        logger.error(f" {e}")
         current_user["role"] = "user"
         return current_user
 
@@ -1448,14 +1452,14 @@ async def refresh_token(current_user: Dict = Depends(get_current_user)):
                         }
                     }
                 else:
-                    print(f"[Auth] 刷新返回数据格式异常: {data}")
+                    logger.exception(f" {data}")
             else:
-                print(f"[Auth] 刷新失败，状态码: {response.status_code}")
+                logger.warning(f" 刷新失败，状态码: {response.status_code}")
                 # 如果现有后端返回 401，说明 token 完全失效，需要重新登录
                 if response.status_code == 401:
                     raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
         except httpx.HTTPError as e:
-            print(f"[Auth] 调用现有后端刷新接口失败: {e}")
+            logger.error(f" {e}")
         
         # 如果刷新失败，尝试返回当前 token（降级处理）
         user_info = await get_user_info(current_token)
@@ -1473,7 +1477,7 @@ async def refresh_token(current_user: Dict = Depends(get_current_user)):
     except HTTPException:
         raise
     except Exception as e:
-        print(f"刷新Token失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"刷新失败: {str(e)}")
 
 
@@ -1510,7 +1514,7 @@ async def update_push_token(
         return {"success": True, "message": "推送Token已更新"}
     
     except Exception as e:
-        print(f"更新推送Token失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
 
 
@@ -1644,7 +1648,7 @@ async def get_work_hours_stats(current_user: Dict = Depends(get_current_user)):
         }
 
     except Exception as e:
-        print(f"获取工时统计失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -1873,7 +1877,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user)):
         }
 
     except Exception as e:
-        print(f"获取今日聚焦数据失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -2003,7 +2007,7 @@ async def get_risk_alerts(current_user: Dict = Depends(get_current_user)):
         }
 
     except Exception as e:
-        print(f"获取风险预警数据失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -2298,7 +2302,7 @@ async def get_project_board(current_user: Dict = Depends(get_current_user)):
             return {"projects": projects}
 
     except Exception as e:
-        print(f"获取项目看板失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {"projects": []}
@@ -2372,7 +2376,7 @@ async def get_risk_matrix(current_user: Dict = Depends(get_current_user)):
             return {"projects": projects}
 
     except Exception as e:
-        print(f"获取风险矩阵失败: {e}")
+        logger.error(f" {e}")
         return {"projects": []}
 
 
@@ -2535,7 +2539,7 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
         return result_data
 
     except Exception as e:
-        print(f"获取智能助手数据失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -2774,7 +2778,7 @@ async def get_smart_assistant(current_user: Dict = Depends(get_current_user)):
         return result_data
 
     except Exception as e:
-        print(f"获取智能助手数据失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -2799,7 +2803,7 @@ async def get_hours_trend(
     """
     # 直接从 current_user 获取 employee_id
     employee_id = current_user.get("username")  # username 就是 employee_id
-    print(f"[DEBUG] hours_trend: employee_id={employee_id}, time_range={time_range}")
+    logger.debug(f" hours_trend: employee_id={employee_id}, time_range={time_range}")
 
     try:
         # text 已从 database 模块导入
@@ -2813,7 +2817,7 @@ async def get_hours_trend(
             days = 30
 
         start_date = today - timedelta(days=days-1)
-        print(f"[DEBUG] today={today}, start_date={start_date}")
+        logger.debug(f" today={today}, start_date={start_date}")
 
         with get_connection() as conn:
             result = conn.execute(text("""
@@ -2835,9 +2839,9 @@ async def get_hours_trend(
 
             for row in result:
                 data_map[str(row[0])] = float(row[1] or 0)
-                print(f"[DEBUG] Found data: {row[0]} -> {row[1]}")
+                logger.debug(f" Found data: {row[0]} -> {row[1]}")
 
-            print(f"[DEBUG] data_map: {data_map}")
+            logger.debug(f" data_map: {data_map}")
 
             for i in range(days):
                 d = start_date + timedelta(days=i)
@@ -2862,7 +2866,7 @@ async def get_hours_trend(
             }
 
     except Exception as e:
-        print(f"获取工时趋势失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {"dates": [], "actual": [], "predicted": []}
@@ -2909,7 +2913,7 @@ async def get_project_distribution(current_user: Dict = Depends(get_current_user
             return distribution
 
     except Exception as e:
-        print(f"获取项目分布失败: {e}")
+        logger.error(f" {e}")
         return []
 
 
@@ -3166,7 +3170,7 @@ async def update_project_task_status(
         }
 
     except Exception as e:
-        print(f"更新任务状态失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
@@ -3183,7 +3187,7 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
     username = current_user.get("username")
     token = get_user_token(username)
 
-    print(f"获取项目: username={username}, token存在={bool(token)}")
+    logger.debug(f"获取项目: username={username}, token存在={bool(token)}")
 
     if token:
         # 获取用户信息
@@ -3195,7 +3199,7 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
 
         # 使用用户token获取项目列表，并过滤
         projects = await get_projects_with_auth(token, user_info)
-        print(f"获取到项目数量: {len(projects)}")
+        logger.debug(f"获取到项目数量: {len(projects)}")
     else:
         # 降级：使用缓存
         projects = await get_cached_projects()
@@ -3361,7 +3365,7 @@ async def get_project_detail(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"获取项目详情失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取项目详情失败: {str(e)}")
@@ -3455,7 +3459,7 @@ async def parse_daily(
         else:
             projects = await get_cached_projects()
 
-        print(f"获取到 {len(projects)} 个项目用于匹配")
+        logger.debug(f"获取到 {len(projects)} 个项目用于匹配")
 
         # 执行工作流
         result = await daily_agent.ainvoke({
@@ -3472,7 +3476,7 @@ async def parse_daily(
             issues=result.get("issues", [])
         )
     except Exception as e:
-        print(f"解析异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
@@ -3542,7 +3546,7 @@ async def submit_daily(
             "work_items": work_items
         }
 
-        print(f"提交日报数据: {json.dumps(daily_report_data, ensure_ascii=False)}")
+        logger.debug(f"提交日报数据: {json.dumps(daily_report_data, ensure_ascii=False)}")
 
         # 调用现有后端API (/api/v1/daily-report 而非 /api/v1/daily)
         response = await http_client.post(
@@ -3562,7 +3566,7 @@ async def submit_daily(
                 "report_id": report_id
             }
         else:
-            print(f"提交失败: {response.status_code} - {response.text}")
+            logger.error(f" {response.status_code} - {response.text}")
             raise HTTPException(
                 status_code=response.status_code,
                 detail=f"提交失败: {response.text}"
@@ -3571,7 +3575,7 @@ async def submit_daily(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"提交异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"提交失败: {str(e)}")
@@ -3654,7 +3658,7 @@ async def upload_plan_excel(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"上传计划异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
@@ -3684,7 +3688,7 @@ async def get_plan_versions(
             return result.get("data", result)
         return []
     except Exception as e:
-        print(f"获取版本列表失败: {e}")
+        logger.error(f" {e}")
         return []
 
 
@@ -3715,7 +3719,7 @@ async def compare_plan_versions(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"版本对比失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"对比失败: {str(e)}")
 
 # ============== 智能问答工具 ==============
@@ -4179,7 +4183,7 @@ async def generate_weekly_report(
         }
 
     except Exception as e:
-        print(f"生成周报失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -4253,7 +4257,7 @@ async def get_my_notifications(
             }
 
     except Exception as e:
-        print(f"获取通知失败: {e}")
+        logger.error(f" {e}")
         return {"notifications": [], "unread_count": 0}
 
 
@@ -4407,7 +4411,7 @@ async def generate_smart_notifications(
         }
 
     except Exception as e:
-        print(f"生成通知失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return {"success": False, "message": str(e)}
@@ -4499,7 +4503,7 @@ def get_embedding_model():
         from sentence_transformers import SentenceTransformer
         # BGE-base-zh: 中文语义向量模型，768维
         _embedding_model = SentenceTransformer('BAAI/bge-base-zh-v1.5')
-        print("[嵌入模型] 已加载 BAAI/bge-base-zh-v1.5")
+        logger.info(" 已加载 BAAI/bge-base-zh-v1.5")
     return _embedding_model
 
 
@@ -4514,7 +4518,7 @@ def generate_embedding(text: str) -> Optional[List[float]]:
         embedding = model.encode(text, normalize_embeddings=True, convert_to_numpy=True)
         return embedding.tolist()
     except Exception as e:
-        print(f"生成嵌入失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         return None
@@ -4575,14 +4579,14 @@ async def upload_document(
         chunks_with_meta = chunk_text_smart(text_content)
 
         # 批量生成嵌入（提升效率）
-        print(f"[文档上传] 开始为 {len(chunks_with_meta)} 个片段生成嵌入...")
+        logger.info(f" 开始为 {len(chunks_with_meta)} 个片段生成嵌入...")
         chunk_texts = [c[0] for c in chunks_with_meta]
 
         try:
             model = get_embedding_model()
             embeddings = model.encode(chunk_texts, convert_to_numpy=True, show_progress_bar=False)
         except Exception as e:
-            print(f"[文档上传] 嵌入生成失败，使用空嵌入: {e}")
+            logger.info(f" 嵌入生成失败，使用空嵌入: {e}")
             embeddings = [None] * len(chunks_with_meta)
 
         # 插入数据库（使用原生 psycopg2 绕过 SQLAlchemy text() 的类型转换限制）
@@ -4723,7 +4727,7 @@ async def search_documents(request: Dict, current_user: Dict = Depends(get_curre
                     cursor.close()
                     conn.close()
             except Exception as e:
-                print(f"语义搜索失败: {e}")
+                logger.error(f" {e}")
 
         # 2. 关键词搜索（补充）
         if not results or len(results) < top_k:
@@ -5184,7 +5188,7 @@ async def chat(
                 project_context += generate_project_context(project["id"], engine)
 
         except Exception as e:
-            print(f"生成项目背景失败: {e}")
+            logger.error(f" {e}")
 
         # ========== 第二步：RAG文档检索（补充知识）==========
         rag_context = ""
@@ -5207,7 +5211,7 @@ async def chat(
                     rag_sources.append(f"{row[0]} - {row[1]}")
 
         except Exception as e:
-            print(f"RAG检索失败: {e}")
+            logger.error(f" {e}")
 
         # ========== 第二步：意图识别与工具调用 ==========
         analysis_prompt = f"""你是一个项目管理助手的意图识别模块。
@@ -5313,7 +5317,7 @@ async def chat(
         }
 
     except Exception as e:
-        print(f"智能问答异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"问答失败: {str(e)}")
@@ -5327,7 +5331,7 @@ scheduler = AsyncIOScheduler()
 
 async def scheduled_morning_reminder():
     """早间提醒 - 08:00"""
-    print(f"[定时任务] 早间提醒 - {datetime.now()}")
+    logger.info(f" 早间提醒 - {datetime.now()}")
     try:
         # text 已从 database 模块导入
         engine = get_db_engine()
@@ -5352,16 +5356,16 @@ async def scheduled_morning_reminder():
                     "task_count": row[2]
                 })
 
-            print(f"[早间提醒] 需提醒{len(reminders)}人")
+            logger.info(f" 需提醒{len(reminders)}人")
             return {"success": True, "count": len(reminders), "reminders": reminders}
 
     except Exception as e:
-        print(f"[早间提醒] 执行失败: {e}")
+        logger.error(f" {e}")
         return {"success": False, "error": str(e)}
 
 async def scheduled_evening_reminder():
     """晚间提醒 - 18:00"""
-    print(f"[定时任务] 晚间提醒 - {datetime.now()}")
+    logger.info(f" 晚间提醒 - {datetime.now()}")
     try:
         # text 已从 database 模块导入
         engine = get_db_engine()
@@ -5385,16 +5389,16 @@ async def scheduled_evening_reminder():
                     "name": row[1]
                 })
 
-            print(f"[晚间提醒] {len(unreported)}人未填日报")
+            logger.info(f" {len(unreported)}人未填日报")
             return {"success": True, "count": len(unreported), "unreported": unreported}
 
     except Exception as e:
-        print(f"[晚间提醒] 执行失败: {e}")
+        logger.error(f" {e}")
         return {"success": False, "error": str(e)}
 
 async def scheduled_risk_alert():
     """风险预警 - 09:00"""
-    print(f"[定时任务] 风险预警 - {datetime.now()}")
+    logger.info(f" 风险预警 - {datetime.now()}")
     try:
         # text 已从 database 模块导入
         engine = get_db_engine()
@@ -5423,11 +5427,11 @@ async def scheduled_risk_alert():
                     "delayed_count": row[3]
                 })
 
-            print(f"[风险预警] {len(risks)}个项目高风险")
+            logger.info(f"[风险预警] {len(risks)}个项目高风险")
             return {"success": True, "count": len(risks), "risks": risks}
 
     except Exception as e:
-        print(f"[风险预警] 执行失败: {e}")
+        logger.error(f" {e}")
         return {"success": False, "error": str(e)}
 
 # 手动触发API（测试用）
@@ -5525,7 +5529,7 @@ async def project_chat(
                     rag_context += f"\n【文档：{row[0]}】\n{row[1][:500]}\n"
                     rag_sources.append(row[0])
         except Exception as e:
-            print(f"知识库检索失败: {e}")
+            logger.error(f" {e}")
 
         # ========== 第三步：意图识别（限制在项目范围内）==========
         project_tool_descriptions = f"""
@@ -5574,7 +5578,7 @@ async def project_chat(
             tool_name = analysis.get("tool", "none")
             params = analysis.get("params", {})
         except Exception as e:
-            print(f"解析意图失败: {e}")
+            logger.error(f" {e}")
             tool_name = "none"
 
         # ========== 第四步：执行工具（项目范围限制）==========
@@ -5706,7 +5710,7 @@ async def project_chat(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"项目问答异常: {e}")
+        logger.exception(f" {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -5722,7 +5726,7 @@ async def startup_event():
     
     # 初始化数据库连接池
     engine = get_engine()
-    print("[Database] 连接池已初始化")
+    logger.info("[Database] 连接池已初始化")
     
     # 初始化HTTP客户端
     http_client = httpx.AsyncClient(timeout=30.0)
@@ -5750,8 +5754,8 @@ async def startup_event():
     # 早上的高风险预警汇总（8:00）已覆盖预警功能
 
     scheduler.start()
-    print("[调度器] 定时任务已启动（含每日预警检测）")
-    print("[HTTP客户端] 已初始化")
+    logger.info("[调度器] 定时任务已启动（含每日预警检测）")
+    logger.info("[HTTP客户端] 已初始化")
 
 @app.on_event("shutdown")
 async def shutdown_event():
@@ -5760,14 +5764,14 @@ async def shutdown_event():
     if http_client:
         await http_client.aclose()
         http_client = None
-        print("[HTTP客户端] 已关闭")
+        logger.info("[HTTP客户端] 已关闭")
     
     # 释放数据库连接池
     dispose_engine()
-    print("[Database] 连接池已释放")
+    logger.info("[Database] 连接池已释放")
 
     scheduler.shutdown()
-    print("[调度器] 定时任务已停止")
+    logger.info("[调度器] 定时任务已停止")
 
 
 # ============== 项目知识库 API ==============
@@ -5875,7 +5879,7 @@ async def upload_document_api(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"文档上传失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"上传失败: {str(e)}")
@@ -5913,7 +5917,7 @@ async def query_knowledge_api(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"知识库问答失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"查询失败: {str(e)}")
@@ -5948,7 +5952,7 @@ async def delete_document_api(
         }
 
     except Exception as e:
-        print(f"删除文档失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"删除失败: {str(e)}")
 
 
@@ -5976,7 +5980,7 @@ async def get_dashboard_overview_api(
         return data
 
     except Exception as e:
-        print(f"获取看板数据失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取数据失败: {str(e)}")
@@ -6145,7 +6149,7 @@ async def get_dashboard_projects_api(
             return result
     
     except Exception as e:
-        print(f"获取项目列表失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
@@ -6207,7 +6211,7 @@ async def get_dashboard_alerts_api(
             } for a in alerts]
 
     except Exception as e:
-        print(f"获取预警列表失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 
 
@@ -6228,7 +6232,7 @@ async def resolve_alert_api(
         return {"success": True, "message": "预警已标记为已处理"}
 
     except Exception as e:
-        print(f"处理预警失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"处理失败: {str(e)}")
 
 
@@ -6244,7 +6248,7 @@ async def get_alert_rules_api(
         return get_alert_rules()
 
     except Exception as e:
-        print(f"获取预警规则失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 
 
@@ -6264,7 +6268,7 @@ async def update_alert_rule_api(
         return {"success": True, "message": "规则已更新"}
 
     except Exception as e:
-        print(f"更新预警规则失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"更新失败: {str(e)}")
 
 
@@ -6282,7 +6286,7 @@ async def get_health_trend_api(
         return get_project_health_trend(project_id, days)
 
     except Exception as e:
-        print(f"获取健康度趋势失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 
 
@@ -6329,7 +6333,7 @@ async def get_ai_insight_api(
         return {"content": insight, "cached": False}
 
     except Exception as e:
-        print(f"获取AI洞察失败: {e}")
+        logger.error(f" {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
@@ -6502,7 +6506,7 @@ async def run_detection_api(
         }
 
     except Exception as e:
-        print(f"预警检测失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"检测失败: {str(e)}")
 
 
@@ -6527,7 +6531,7 @@ async def test_push_api(
         }
 
     except Exception as e:
-        print(f"测试推送失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"推送失败: {str(e)}")
 
 
@@ -6549,7 +6553,7 @@ async def test_morning_push_api(
         }
 
     except Exception as e:
-        print(f"测试早上推送失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"推送失败: {str(e)}")
 
 
@@ -6571,7 +6575,7 @@ async def test_afternoon_push_api(
         }
 
     except Exception as e:
-        print(f"测试下午推送失败: {e}")
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"推送失败: {str(e)}")
 
 

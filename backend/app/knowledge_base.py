@@ -14,8 +14,10 @@ from datetime import datetime
 import httpx
 try:
     from .database import get_engine, text
+    from .logger import kb_logger
 except ImportError:
     from database import get_engine, text
+    from logger import kb_logger
 
 import PyPDF2
 from docx import Document
@@ -45,7 +47,7 @@ def extract_text_from_pdf(file_path: str) -> str:
                 text += page.extract_text() + "\n"
         return text.strip()
     except Exception as e:
-        print(f"PDF提取失败: {e}")
+        kb_logger.error(f"PDF提取失败: {e}")
         return ""
 
 
@@ -58,7 +60,7 @@ def extract_text_from_docx(file_path: str) -> str:
             text += para.text + "\n"
         return text.strip()
     except Exception as e:
-        print(f"Word提取失败: {e}")
+        kb_logger.error(f"Word提取失败: {e}")
         return ""
 
 
@@ -120,7 +122,7 @@ async def generate_summary(text: str) -> str:
                 result = response.json()
                 return result.get("choices", [{}])[0].get("message", {}).get("content", "")
     except Exception as e:
-        print(f"生成摘要失败: {e}")
+        kb_logger.error(f"生成摘要失败: {e}")
     
     return ""
 
@@ -235,7 +237,7 @@ async def upload_document(
         }
         
     except Exception as e:
-        print(f"文档上传失败: {e}")
+        kb_logger.exception(f"文档上传失败: {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -389,7 +391,7 @@ async def query_knowledge(
         }
         
     except Exception as e:
-        print(f"知识库问答失败: {e}")
+        kb_logger.exception(f"知识库问答失败: {e}")
         import traceback
         traceback.print_exc()
         return {
@@ -459,7 +461,7 @@ def get_knowledge_list(
             return docs
             
     except Exception as e:
-        print(f"获取知识库列表失败: {e}")
+        kb_logger.error(f"获取知识库列表失败: {e}")
         return []
 
 
@@ -505,7 +507,7 @@ def get_knowledge_stats(project_id: Optional[int] = None) -> Dict[str, Any]:
             }
             
     except Exception as e:
-        print(f"获取统计信息失败: {e}")
+        kb_logger.error(f"获取统计信息失败: {e}")
         return {
             "total_docs": 0,
             "projects": 0,

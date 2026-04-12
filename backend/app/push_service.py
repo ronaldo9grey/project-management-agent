@@ -9,6 +9,11 @@ import json
 from typing import Optional, List
 from datetime import datetime
 
+try:
+    from .logger import push_logger
+except ImportError:
+    from logger import push_logger
+
 
 # PushPlus 配置
 PUSHPLUS_TOKEN = os.getenv("PUSHPLUS_TOKEN", "")
@@ -63,22 +68,22 @@ def push_to_wechat(
         if actual_topic:
             data["topic"] = actual_topic
         
-        print(f"[DEBUG] 推送参数: token={actual_token[:10]}..., topic={actual_topic}, title={title}")
+        push_logger.debug(f"推送参数: token={actual_token[:10]}..., topic={actual_topic}, title={title}")
         
         response = requests.post(PUSHPLUS_API, json=data, timeout=10)
         result = response.json()
         
         if result.get("code") == 200:
             target = f"群组[{actual_topic}]" if actual_topic else ("个人" if token else "全局")
-            print(f"✅ 微信推送成功 -> {target}: {title}")
+            push_logger.info(f"微信推送成功 -> {target}: {title}")
             return True
         else:
-            print(f"❌ 微信推送失败: {result.get('msg', 'Unknown error')}")
-            print(f"[DEBUG] 响应详情: {result}")
+            push_logger.error(f"微信推送失败: {result.get('msg', 'Unknown error')}")
+            push_logger.debug(f"响应详情: {result}")
             return False
     
     except Exception as e:
-        print(f"❌ 微信推送异常: {e}")
+        push_logger.exception(f"微信推送异常: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -245,7 +250,7 @@ def push_morning_alerts():
     """
     # 检查是否在推送时间
     if not should_push():
-        print("非工作时间，跳过推送")
+        push_logger.info("非工作时间，跳过推送")
         return False
     
     try:
@@ -277,7 +282,7 @@ def push_morning_alerts():
     total_count = len(alerts)
     
     if not alerts:
-        print("无高风险预警，跳过推送")
+        push_logger.info("无高风险预警，跳过推送")
         return False
     
     # 按项目名称分组
@@ -375,7 +380,7 @@ def push_afternoon_reminder():
     """
     # 检查是否在推送时间
     if not should_push():
-        print("非工作时间，跳过推送")
+        push_logger.info("非工作时间，跳过推送")
         return False
     
     try:
@@ -691,14 +696,14 @@ async def push_to_feishu(
         result = response.json()
         
         if result.get("StatusCode") == 0:
-            print(f"✅ 飞书推送成功: {title}")
+            push_logger.info(f"飞书推送成功: {title}")
             return True
         else:
-            print(f"❌ 飞书推送失败: {result}")
+            push_logger.error(f"飞书推送失败: {result}")
             return False
     
     except Exception as e:
-        print(f"❌ 飞书推送异常: {e}")
+        push_logger.exception(f"飞书推送异常: {e}")
         return False
 
 
