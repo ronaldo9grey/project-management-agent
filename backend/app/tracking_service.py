@@ -27,18 +27,17 @@ logger = get_logger(__name__)
 
 def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, Any]:
     """
-    执行视图：任务驱动
+    执行视图：任务驱动（整体视角）
     
     计算规则：
-    - 今日截止：end_date == 今天
-    - 本周截止：今天 < end_date <= 本周日
-    - 本月截止：本周日 < end_date <= 本月末
-    - 已过期：end_date < 今天（单独展示）
+    - 总任务数：所有最新版本任务
+    - 今日截止：end_date == 今天（不限状态）
+    - 本周截止：今天 < end_date <= 本周日（不限状态）
+    - 本月截止：本周日 < end_date <= 本月末（不限状态）
+    - 已过期：end_date < 今天（不限状态）
+    - 近期完成：最近7天状态变更为"已完成"的任务
     
-    返回：
-    - 我的任务（今日/本周/本月/已过期）
-    - 近期完成（最近7天）
-    - 统计数据
+    注意：看板展示整体情况，不区分登录人
     """
     engine = get_engine()
     today = date.today()
@@ -46,40 +45,41 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
     month_end = date(today.year, today.month + 1, 1) - timedelta(days=1) if today.month < 12 else date(today.year + 1, 1, 1) - timedelta(days=1)
     
     with engine.connect() as conn:
-        # 1. 查询任务（统一逻辑：进行中 + 延期）
-        if role_id == 11:  # 管理员看所有
-            my_tasks_query = """
-                SELECT 
-                    pt.task_id, pt.task_name, pt.progress, pt.status,
-                    pt.start_date, pt.end_date, pt.assignee,
-                    p.name as project_name, p.id as project_id
-                FROM project_tasks pt
-                JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
-                WHERE pt.is_deleted = false 
-                  AND pt.is_latest = true
-                  AND pt.status IN ('进行中', '延期')
-                  AND p.is_deleted = false
-                ORDER BY pt.end_date NULLS LAST, pt.progress ASC
-                LIMIT 50
-            """
-            my_tasks = conn.execute(text(my_tasks_query)).fetchall()
-        else:
-            my_tasks_query = """
-                SELECT 
-                    pt.task_id, pt.task_name, pt.progress, pt.status,
-                    pt.start_date, pt.end_date, pt.assignee,
-                    p.name as project_name, p.id as project_id
-                FROM project_tasks pt
-                JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
-                WHERE pt.is_deleted = false 
-                  AND pt.is_latest = true
-                  AND pt.status IN ('进行中', '延期')
-                  AND pt.assignee = :user_name
-                  AND p.is_deleted = false
-                ORDER BY pt.end_date NULLS LAST, pt.progress ASC
-                LIMIT 50
-            """
-            my_tasks = conn.execute(text(my_tasks_query), {"user_name": user_name}).fetchall()
+        # 1. 总任务数统计（按状态分类）
+        total_stats = conn.execute(text("""
+            SELECT 
+                COUNT(*) as total,
+                COUNT(CASE WHEN status = '未开始' THEN 1 END) as pending,
+                COUNT(CASE WHEN status = '进行中' THEN 1 END) as ongoing,
+                COUNT(CASE WHEN status = '延期' THEN 1 END) as delayed,
+                COUNT(CASE WHEN status = '已完成' THEN 1 END) as completed
+            FROM project_tasks
+            WHERE is_deleted = false AND is_latest = true
+        """)).fetchone()
+        
+        total_tasks = total_stats[0] or 0
+        status_pending = total_stats[1] or 0
+        status_ongoing = total_stats[2] or 0
+        status_delayed = total_stats[3] or 0
+        status_completed = total_stats[4] or 0
+        
+        # 2. 查询待办任务（不限状态，按截止日期分类）
+        # 只看有截止日期的任务
+        tasks_query = """
+            SELECT 
+                pt.task_id, pt.task_name, pt.progress, pt.status,
+                pt.start_date, pt.end_date, pt.assignee,
+                p.name as project_name, p.id as project_id
+            FROM project_tasks pt
+            JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
+            WHERE pt.is_deleted = false 
+              AND pt.is_latest = true
+              AND pt.end_date IS NOT NULL
+              AND p.is_deleted = false
+            ORDER BY pt.end_date ASC, pt.progress ASC
+            LIMIT 100
+        """
+        all_tasks = conn.execute(text(tasks_query)).fetchall()
         
         # 分类任务
         today_tasks = []
@@ -87,7 +87,7 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
         month_tasks = []
         overdue_tasks = []
         
-        for task in my_tasks:
+        for task in all_tasks:
             task_data = {
                 "task_id": task[0],
                 "task_name": task[1],
@@ -113,11 +113,11 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
                 elif end_date <= month_end:
                     month_tasks.append(task_data)
         
-        # 2. 近期完成（最近7天）
+        # 3. 近期完成（最近7天，包含完成人）
         completed_query = """
             SELECT 
                 pt.task_id, pt.task_name, pt.actual_end_date,
-                p.name as project_name
+                p.name as project_name, pt.assignee
             FROM project_tasks pt
             JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
             WHERE pt.is_deleted = false
@@ -135,17 +135,39 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
             "task_id": t[0],
             "task_name": t[1],
             "completed_date": str(t[2]) if t[2] else None,
-            "project_name": t[3]
+            "project_name": t[3],
+            "assignee": t[4]  # 完成人
         } for t in completed_tasks]
         
-        # 3. 统计数据
+        # 4. 统计数据
         stats = {
+            "total_tasks": total_tasks,
+            "status_pending": status_pending,
+            "status_ongoing": status_ongoing,
+            "status_delayed": status_delayed,
+            "status_completed": status_completed,
             "today_count": len(today_tasks),
             "week_count": len(week_tasks),
             "month_count": len(month_tasks),
             "overdue_count": len(overdue_tasks),
-            "completed_week": len(completed),
-            "total_pending": len(today_tasks) + len(week_tasks) + len(month_tasks)
+            "completed_week": len(completed)
+        }
+        
+        return {
+            "today_tasks": today_tasks,
+            "week_tasks": week_tasks,
+            "month_tasks": month_tasks,
+            "overdue_tasks": overdue_tasks,
+            "completed": completed,
+            "stats": stats,
+            "formulas": {
+                "total_tasks": "所有最新版本任务总数",
+                "today": "截止日期 = 今天",
+                "week": "今天 < 截止日期 ≤ 本周日",
+                "month": "本周日 < 截止日期 ≤ 本月末",
+                "overdue": "截止日期 < 今天（已过期）",
+                "completed_week": "最近7天状态变更为'已完成'的任务"
+            }
         }
         
         return {

@@ -95,20 +95,32 @@ interface ExecutionData {
   week_tasks: Task[]
   month_tasks: Task[]
   overdue_tasks: Task[]
-  completed: { task_id: string; task_name: string; completed_date: string; project_name: string }[]
+  completed: { 
+    task_id: string
+    task_name: string
+    completed_date: string
+    project_name: string
+    assignee: string
+  }[]
   stats: { 
+    total_tasks: number
+    status_pending: number
+    status_ongoing: number
+    status_delayed: number
+    status_completed: number
     today_count: number
     week_count: number
     month_count: number
     overdue_count: number
     completed_week: number
-    total_pending: number
   }
   formulas: {
+    total_tasks: string
     today: string
     week: string
     month: string
     overdue: string
+    completed_week: string
   }
 }
 
@@ -346,7 +358,44 @@ export default function TrackingPage() {
             {/* 执行视图 */}
             {activeView === 'execution' && executionData && (
               <div>
-                {/* 统计卡片 */}
+                {/* 总任务数 */}
+                <div style={{
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                  borderRadius: 16,
+                  padding: 20,
+                  marginBottom: 16,
+                  color: 'white'
+                }}>
+                  <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>
+                    总任务数
+                  </div>
+                  <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 12 }}>
+                    {executionData.stats.total_tasks}
+                  </div>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(4, 1fr)',
+                    gap: 8
+                  }}>
+                    {[
+                      { label: '未开始', count: executionData.stats.status_pending, color: '#94a3b8' },
+                      { label: '进行中', count: executionData.stats.status_ongoing, color: '#3b82f6' },
+                      { label: '延期', count: executionData.stats.status_delayed, color: '#ef4444' },
+                      { label: '已完成', count: executionData.stats.status_completed, color: '#22c55e' }
+                    ].map(item => (
+                      <div key={item.label} style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 18, fontWeight: 600, color: item.color }}>
+                          {item.count}
+                        </div>
+                        <div style={{ fontSize: 11, opacity: 0.8 }}>
+                          {item.label}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 待办统计卡片 */}
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(4, 1fr)',
@@ -433,7 +482,7 @@ export default function TrackingPage() {
                       alignItems: 'center',
                       gap: 6
                     }}>
-                      ✅ 近期完成
+                      ✅ 近期完成（最近7天）
                     </div>
                     {executionData.completed.map(task => (
                       <div key={task.task_id} style={{
@@ -447,7 +496,7 @@ export default function TrackingPage() {
                           {task.task_name}
                         </div>
                         <div style={{ fontSize: 12, color: '#16a34a', marginTop: 2 }}>
-                          {task.project_name} · {formatDate(task.completed_date)}
+                          {task.project_name} · {task.assignee || '未知'} · {formatDate(task.completed_date)}
                         </div>
                       </div>
                     ))}
