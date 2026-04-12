@@ -254,6 +254,7 @@ export default function HomePage() {
               <Link to="/daily" className="nav-link">日报</Link>
               <Link to="/projects" className="nav-link">项目</Link>
               <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/tracking" className="nav-link">追踪</Link>
               <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
