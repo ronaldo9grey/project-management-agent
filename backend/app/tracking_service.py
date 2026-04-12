@@ -240,8 +240,13 @@ def get_health_view(user_id: str, role_id: int) -> Dict[str, Any]:
         cost_risk_avg = round(sum(cost_risks) / len(cost_risks), 1) if cost_risks else 0
         
         # ===== 3. 综合风险 =====
-        # 综合风险 = 进度风险 × 0.5 + 成本风险 × 0.5
-        overall_risk = round(progress_risk * 0.5 + cost_risk_avg * 0.5, 1)
+        # 综合风险计算规则：
+        # - 如果成本数据缺失（成本风险=0），只看进度风险
+        # - 否则：进度风险 × 0.7 + 成本风险 × 0.3（进度更重要）
+        if cost_risk_avg == 0:
+            overall_risk = progress_risk
+        else:
+            overall_risk = round(progress_risk * 0.7 + cost_risk_avg * 0.3, 1)
         
         radar_data = {
             "progress": progress_risk,
@@ -336,7 +341,7 @@ def get_health_view(user_id: str, role_id: int) -> Dict[str, Any]:
             "formulas": {
                 "progress_risk": "过期任务数 ÷ 总任务数 × 100\n过期：截止日期<今天 且 进度<100%",
                 "cost_risk": "max(0, (实际-预算)÷预算×100)\n只统计有实际成本的科目",
-                "overall_risk": "进度风险 × 0.5 + 成本风险 × 0.5",
+                "overall_risk": "成本数据缺失时 = 进度风险\n有成本数据时 = 进度×0.7 + 成本×0.3",
                 "project_score": "延期天数×2 + 过期任务数×15 + 延期任务数×10\n最高100分"
             }
         }

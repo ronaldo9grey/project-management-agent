@@ -248,10 +248,10 @@ export default function TrackingPage() {
     return { bg: '#eff6ff', color: '#2563eb', label: '进行中' }
   }
 
-  // 风险等级颜色
+  // 风险等级颜色（阈值：低<15%，中15%~30%，高≥30%）
   const getRiskColor = (score: number) => {
-    if (score >= 70) return '#dc2626'
-    if (score >= 40) return '#f59e0b'
+    if (score >= 30) return '#dc2626'
+    if (score >= 15) return '#f59e0b'
     return '#22c55e'
   }
 
@@ -500,13 +500,13 @@ export default function TrackingPage() {
                     <span style={{
                       marginLeft: 'auto',
                       fontSize: 14,
-                      background: healthData.radar.overall >= 50 ? '#fef2f2' : '#f0fdf4',
+                      background: healthData.radar.overall >= 30 ? '#fef2f2' : healthData.radar.overall >= 15 ? '#fffbeb' : '#f0fdf4',
                       color: getRiskColor(healthData.radar.overall),
                       padding: '4px 12px',
                       borderRadius: 20,
                       fontWeight: 600
                     }}>
-                      {healthData.radar.overall >= 50 ? '高风险' : '低风险'} {healthData.radar.overall}
+                      {healthData.radar.overall >= 30 ? '高风险' : healthData.radar.overall >= 15 ? '中风险' : '低风险'} {healthData.radar.overall}
                     </span>
                   </div>
                   
