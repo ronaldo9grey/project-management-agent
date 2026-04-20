@@ -19,6 +19,12 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
+# AI 线程池工具（防止AI调用阻塞Worker）
+try:
+    from .task_auto import run_in_thread, AI_EXECUTOR
+except ImportError:
+    from task_auto import run_in_thread, AI_EXECUTOR
+
 # API限流配置
 limiter = Limiter(key_func=get_remote_address)
 
@@ -141,19 +147,31 @@ def verify_token(token: str) -> Optional[Dict]:
     except JWTError:
         return None
 
+
+def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+    """创建 JWT access token"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(hours=8)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
-    """获取当前登录用户"""
+    """获取当前登录用户
+    
+    注意：JWT 本身是自包含的，不需要依赖内存缓存。
+    每次请求都从 JWT 解析用户信息，避免多 worker 缓存不同步问题。
+    """
     credentials_exception = HTTPException(
         status_code=401,
         detail="认证失败",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # 检查缓存（使用 cache_manager）
-    cached_user = cache_manager.get_current_user(token)
-    if cached_user:
-        return cached_user
-
+    # 直接验证 JWT（不依赖缓存，避免多 worker 不同步）
     payload = verify_token(token)
     if payload is None:
         raise credentials_exception
@@ -161,45 +179,33 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
     # 获取用户信息，补充 employee_id
     username = payload.get("sub")
     if username:
-        # 优先从缓存获取
-        user_info = get_user_info_cache(username)
-        
-        # 如果缓存没有，从数据库查询
-        if not user_info:
-            try:
-                # text 已从 database 模块导入
-                from dotenv import load_dotenv
-                load_dotenv()                
-                with get_connection() as conn:
-                    result = conn.execute(text("""
-                        SELECT employee_id, name, department, position
-                        FROM personnel WHERE employee_id = :username
-                    """), {"username": username}).fetchone()
-                    
-                    if result:
-                        user_info = {
-                            "employee_id": result[0],
-                            "name": result[1],
-                            "department": result[2],
-                            "position": result[3]
-                        }
-                        # 存入缓存
-                        cache_manager.store_user_info(username, user_info)
-            except Exception as e:
-                logger.error(f" {e}")
-        
-        if user_info:
-            payload["employee_id"] = user_info.get("employee_id", username)
-            payload["name"] = user_info.get("name", "")
-            payload["department"] = user_info.get("department", "")
-            payload["position"] = user_info.get("position", "")
+        # 从数据库查询用户信息（绕过缓存）
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            with get_connection() as conn:
+                result = conn.execute(text("""
+                    SELECT employee_id, name, department, position
+                    FROM personnel WHERE employee_id = :username
+                """), {"username": username}).fetchone()
+                
+                if result:
+                    payload["employee_id"] = result[0] or username
+                    payload["name"] = result[1] or ""
+                    payload["department"] = result[2] or ""
+                    payload["position"] = result[3] or ""
+                else:
+                    # 用户不存在于 personnel 表，使用默认值
+                    payload["employee_id"] = username
+                    payload["name"] = username
+        except Exception as e:
+            logger.warning(f"获取用户信息失败: {e}")
+            payload["employee_id"] = username
 
     # 确保 employee_id 存在
     if "employee_id" not in payload:
-        payload["employee_id"] = username  # 使用 username 作为 employee_id
+        payload["employee_id"] = username
 
-    # 缓存用户信息（使用 cache_manager）
-    cache_manager.store_current_user(token, payload)
     return payload
 
 async def get_user_info(token: str) -> Dict:
@@ -377,6 +383,21 @@ llm = ChatOpenAI(
     temperature=0.2
 )
 
+
+def _llm_invoke_sync(llm, messages):
+    """同步LLM调用（在线程池中执行）"""
+    return llm.invoke(messages)
+
+
+async def llm_invoke_threaded(messages):
+    """
+    异步LLM调用接口：在线程池中执行，不阻塞Worker
+    
+    用法：response = await llm_invoke_threaded(messages)
+    """
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(AI_EXECUTOR, _llm_invoke_sync, llm, messages)
+
 # ============== 数据模型 ==============
 
 class DailyEntry(BaseModel):
@@ -481,6 +502,16 @@ def match_project_by_name(project_hint: str, projects: List[Dict]) -> Optional[D
         keywords = re.findall(r'[\u4e00-\u9fa5]{2,10}', text)
         return [k.lower() for k in keywords]
     
+    # 计算字符级别的相似度（处理"转换"vs"转化"这类情况）
+    def char_similarity(s1, s2):
+        if not s1 or not s2:
+            return 0
+        s1_set = set(s1)
+        s2_set = set(s2)
+        intersection = len(s1_set & s2_set)
+        union = len(s1_set | s2_set)
+        return intersection / union if union > 0 else 0
+    
     hint_keywords = extract_keywords(project_hint)
     hint = project_hint.lower()
     best_match = None
@@ -508,6 +539,11 @@ def match_project_by_name(project_hint: str, projects: List[Dict]) -> Optional[D
                     score = max(score, 0.8)
                 elif hk in nk or nk in hk:
                     score = max(score, 0.5)
+                else:
+                    # 字符级别相似度（处理同音字/形近字）
+                    sim = char_similarity(hk, nk)
+                    if sim > 0.7:  # 70%字符相同
+                        score = max(score, 0.6)
         
         if score > best_score:
             best_score = score
@@ -552,7 +588,7 @@ def match_task_by_content(content: str, tasks: List[Dict]) -> Optional[Dict]:
 
 # ============== 日报解析（智能版） ==============
 
-def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = None) -> Dict[str, Any]:
+async def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = None) -> Dict[str, Any]:
     """
     智能解析日报文本，自动匹配项目和任务
 
@@ -577,16 +613,34 @@ def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = 
 
 ## 解析规则
 
-### 1. 时间识别
-- 支持："9点"、"09:00"、"上午"、"下午2点半"
-- 标准工作时间：上午 08:15-12:00，下午 13:45-18:00
-- 输出格式：HH:MM（24小时制）
+### 1. 时间识别（重要！）
+支持多种时间格式：
+- 纯时间："9点"、"09:00"、"14:30"
+- 时间段："9:00-12:00"、"13:45-18:00"
+- 混合格式："上午:9:00-12:00"、"下午：16:00-20:00"（注意冒号可能是中英文混用）
+- 时段+时间："上午9点"、"下午2点半"
 
-### 2. 时间段共享（非常重要！）
-- 如果用户说"下午13:45-18:00做了4件事"，这表示【共享时间段】
-- **正确做法**：为每个任务生成独立条目，所有条目使用相同的时间
-- **错误做法**：把时间累加
-- hours 字段填 0，系统会自动计算
+**标准工作时间**：
+- 上午：08:15-12:00（含午休前）
+- 下午：13:45-18:00
+- **加班**：18:00之后的时间
+
+**时间段分隔符识别**：
+- 分号（;或；）：分隔不同的工作时间段
+- 例如："上午:9:00-12:00编写xxx；下午：16:00-20:00到yyy"
+  - 这表示两个独立的工作时间段，应生成两个条目
+
+**加班自动拆分**：
+- 如果时间段跨越18:00，必须拆分为"标准时间"和"加班"两个条目
+- 例如："下午16:00-20:00到田阳铝厂..."
+  - 标准时间：16:00-18:00（2小时）
+  - 加班时间：18:00-20:00（2小时）
+  - 生成两个条目，内容相同但时间不同
+
+### 2. 时间段共享
+- 如果用户说"下午13:45-18:00做了4件事"，表示共享时间段
+- 为每个任务生成独立条目，时间相同
+- hours 字段填 0，系统自动计算
 
 ### 3. 序号内容分组（重要！）
 当用户使用序号（1. 2. 3. 4.）列出多项工作时，要正确识别每项的边界：
@@ -655,6 +709,53 @@ def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = 
 ### 6. 工时计算
 - hours 字段统一填 0，由系统自动计算
 - 系统会自动扣除午休时间（12:00-13:45）
+
+### 7. 多时间段+加班示例
+
+**示例输入**：
+"上午:9:00-12:00编写田林铝厂供电整流PLC控制系统稳定性研发项目的招标技术条件；下午：16:00-20:00到田阳铝厂开展田阳铝厂阳极组装提质增效技术服务项目的现场诊断工作"
+
+**正确解析（跨越加班时间，必须拆分）**：
+{{
+  "entries": [
+    {{
+      "start_time": "09:00",
+      "end_time": "12:00",
+      "location": "办公室",
+      "content": "编写田林铝厂供电整流PLC控制系统稳定性研发项目的招标技术条件",
+      "project_hint": "田林铝厂供电整流PLC",
+      "matched_project_id": null,
+      "matched_project_name": "",
+      "hours": 0
+    }},
+    {{
+      "start_time": "16:00",
+      "end_time": "18:00",
+      "location": "田阳铝厂",
+      "content": "开展田阳铝厂阳极组装提质增效技术服务项目的现场诊断工作",
+      "project_hint": "田阳铝厂阳极组装提质增效",
+      "matched_project_id": null,
+      "matched_project_name": "",
+      "hours": 0
+    }},
+    {{
+      "start_time": "18:00",
+      "end_time": "20:00",
+      "location": "田阳铝厂",
+      "content": "开展田阳铝厂阳极组装提质增效技术服务项目的现场诊断工作（加班）",
+      "project_hint": "田阳铝厂阳极组装提质增效",
+      "matched_project_id": null,
+      "matched_project_name": "",
+      "hours": 0
+    }}
+  ],
+  "confidence": 0.9,
+  "issues": []
+}}
+注意：下午16:00-20:00跨越18:00，拆分为两个条目。
+---
+
+### 8. 序号内容分组示例
 
 示例输入：
 "上午8:15-12:00协调4个铝厂一种新型电解铝多功能天车抓斗结构的设计及产业化项目审核技术文件；下午13:45-18:00协调1.隆林铝厂除尘器布袋脉冲精准控制研究，2.田林铝厂供电整流PLC控制系统稳定性研发项目，3.隆林铝厂整流系统总调PLC升级改造项目，4.隆林铝厂空压机集中控制项目研究，合同线下审批"
@@ -744,7 +845,7 @@ def parse_daily_text_smart(text: str, projects: List[Dict], current_date: str = 
         ]
 
         logger.debug(f" 调用 DeepSeek API...")
-        response = llm.invoke(messages)
+        response = await llm_invoke_threaded(messages)
         logger.debug(f" API 返回: {response.content[:200]}...")
 
         # 清理响应内容
@@ -818,44 +919,73 @@ def simple_parse_fallback(text: str, projects: List[Dict]) -> List[Dict]:
     简单解析兜底方案：当AI解析失败时使用
     """
     entries = []
+    import re
+    
+    # 提取时间信息
+    time_pattern = r'(\d{1,2}[：:]\d{2})\s*[-~至到]+\s*(\d{1,2}[：:]\d{2})'
+    time_match = re.search(time_pattern, text)
+    start_time = "08:15"
+    end_time = "18:00"
+    
+    if time_match:
+        start_time = time_match.group(1).replace('：', ':')
+        end_time = time_match.group(2).replace('：', ':')
 
     # 提取工时信息（如果用户明确说了"做了X小时"）
-    import re
     hours_pattern = r'(\d+(?:\.\d+)?)\s*小时'
     hours_matches = re.findall(hours_pattern, text)
     explicit_hours = float(hours_matches[0]) if hours_matches else None
 
-    # 提取项目关键词
+    # 提取项目关键词（增加模糊匹配）
+    best_match = None
+    best_score = 0
+    
     for project in projects:
         project_name = project.get("name", "")
         # 去掉"项目"、"工程"等通用词
         keywords = project_name.replace("项目", "").replace("工程", "").replace("系统", "").strip()
-
+        
+        # 完全匹配
         if keywords and keywords in text:
-            # 找到匹配的项目，使用标准工作时间
-            entries.append({
-                "start_time": "08:15",
-                "end_time": "18:00",
-                "location": "办公室",
-                "content": text[:50],
-                "project_hint": keywords,
-                "matched_project_id": project.get("id"),
-                "matched_project_name": project_name,
-                "hours": explicit_hours if explicit_hours else 0  # 如果明确说了工时则用，否则让系统计算
-            })
+            best_match = (project, project_name, keywords)
             break
+            
+        # 模糊匹配（相似度检查）
+        if keywords:
+            # 计算关键词在文本中的覆盖率
+            keyword_chars = set(keywords)
+            text_chars = set(text)
+            overlap = len(keyword_chars & text_chars)
+            score = overlap / len(keyword_chars) if keyword_chars else 0
+            
+            if score > best_score and score > 0.6:  # 60% 相似度阈值
+                best_score = score
+                best_match = (project, project_name, keywords)
 
-    # 如果还是没找到，创建一个默认条目
-    if not entries:
+    if best_match:
+        project, project_name, keywords = best_match
+        # 找到匹配的项目
         entries.append({
-            "start_time": "08:15",
-            "end_time": "18:00",
+            "start_time": start_time,
+            "end_time": end_time,
             "location": "办公室",
-            "content": text[:50] if len(text) > 50 else text,
+            "content": text,  # 保留完整内容，不再截断
+            "project_hint": keywords,
+            "matched_project_id": project.get("id"),
+            "matched_project_name": project_name,
+            "hours": explicit_hours if explicit_hours else 0
+        })
+    else:
+        # 没有匹配到项目
+        entries.append({
+            "start_time": start_time,
+            "end_time": end_time,
+            "location": "办公室",
+            "content": text,  # 保留完整内容
             "project_hint": "",
             "matched_project_id": None,
             "matched_project_name": "",
-            "hours": 0  # 让系统自动计算
+            "hours": 0
         })
 
     return entries
@@ -885,7 +1015,7 @@ class DailyParseState(dict):
 
 async def parse_node(state: DailyParseState):
     """解析节点"""
-    result = parse_daily_text_smart(
+    result = await parse_daily_text_smart(
         state["text"],
         state.get("projects", []),
         datetime.now().strftime("%Y-%m-%d")
@@ -937,7 +1067,7 @@ async def smart_parse_daily(
     current_user: Dict = Depends(get_current_user)
 ):
     """
-    智能解析日报文本 - 使用 DeepSeek AI 解析 + 项目任务匹配
+    智能解析日报文本 - 一次 AI 调用完成项目+任务+时间解析
 
     支持多次输入，每次解析会覆盖之前的内容
 
@@ -948,76 +1078,64 @@ async def smart_parse_daily(
     - warnings: 警告信息
     """
     try:
-        # 导入任务匹配函数
+        # 导入线程池版本的解析函数，AI调用不阻塞Worker
         import sys
         sys.path.insert(0, os.path.dirname(__file__))
-        from task_auto import match_task_by_content_ai
+        from task_auto import parse_daily_all_in_one_threaded
 
-        username = current_user.get("username")
-        token = get_user_token(username)
-
-        if not token:
-            raise HTTPException(status_code=401, detail="未找到用户认证信息")
-
-        # 获取所有项目用于匹配（不受权限限制，任何人都可以参与任何项目）
-        projects = await get_all_projects_for_matching()
-
-        # 使用本地智能解析函数（调用 DeepSeek API）
-        logger.debug(f" 开始解析: {request.text[:50]}...")
-        parsed = parse_daily_text_smart(request.text, projects, request.report_date)
-
-        # 为每个条目匹配任务
+        logger.info(f"用户 {current_user.get('username')} 开始解析日报: {request.text[:50]}...")
+        
+        # 在线程池中执行 AI 解析，主事件循环释放处理其他请求
+        result = await parse_daily_all_in_one_threaded(request.text, request.report_date)
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail="AI解析失败")
+        
+        # 转换为前端期望的格式
         entries = []
         matched_projects_list = []
-        unmatched_projects_list = []
-
-        for entry in parsed.get("entries", []):
-            # 如果匹配到项目，尝试匹配任务
-            if entry.get("matched_project_id"):
-                matched_task = await match_task_by_content_ai(
-                    entry.get("content", ""),
-                    entry["matched_project_id"],
-                    entry.get("matched_project_name", "")
-                )
-                if matched_task:
-                    entry["matched_task_id"] = matched_task.get("task_id")
-                    entry["matched_task_name"] = matched_task.get("task_name")
-
-                # 记录匹配的项目
-                if entry["matched_project_name"] not in [p.get("name") for p in matched_projects_list]:
-                    matched_projects_list.append({
-                        "id": entry["matched_project_id"],
-                        "name": entry["matched_project_name"]
-                    })
-
-            entries.append(entry)
-
-        # 收集未匹配的项目
-        for entry in parsed.get("entries", []):
-            if entry.get("project_hint") and not entry.get("matched_project_id"):
-                if entry["project_hint"] not in unmatched_projects_list:
-                    unmatched_projects_list.append(entry["project_hint"])
-
-        # 构建警告信息
-        warnings = []
-        if unmatched_projects_list:
-            for project_name in unmatched_projects_list:
-                warnings.append(f"⚠️ 项目「{project_name}」在系统中未找到匹配，请确认项目名称是否正确")
-
-        if not entries:
-            warnings.append("⚠️ 未识别到有效的工作事项，请检查输入格式")
-
+        matched_project_ids = set()
+        
+        for entry in result.get("entries", []):
+            project = entry.get("project")
+            task = entry.get("task")
+            time_info = entry.get("time", {})
+            
+            # 构建条目
+            formatted_entry = {
+                "content": entry.get("content", ""),
+                "matched_project_id": project.get("id") if project else None,
+                "matched_project_name": project.get("name") if project else None,
+                "matched_task_id": task.get("id") if task else None,
+                "matched_task_name": task.get("name") if task else None,
+                "start_time": time_info.get("start"),
+                "end_time": time_info.get("end"),
+                "hours": time_info.get("hours", 4.0),
+                "is_overtime": time_info.get("is_overtime", False),
+                "confidence": entry.get("confidence", 0.8)
+            }
+            
+            entries.append(formatted_entry)
+            
+            # 收集匹配的项目
+            if project and project.get("id") not in matched_project_ids:
+                matched_projects_list.append({
+                    "id": project.get("id"),
+                    "name": project.get("name")
+                })
+                matched_project_ids.add(project.get("id"))
+        
         return {
             "entries": entries,
             "matched_projects": matched_projects_list,
-            "unmatched_projects": unmatched_projects_list,
-            "warnings": warnings,
-            "confidence": parsed.get("confidence", 0.7),
-            "issues": warnings
+            "unmatched_projects": [],
+            "warnings": result.get("warnings", []),
+            "confidence": sum(e.get("confidence", 0.8) for e in result.get("entries", [])) / max(len(result.get("entries", [])), 1),
+            "issues": result.get("warnings", [])
         }
 
     except Exception as e:
-        logger.error(f" {e}")
+        logger.error(f"解析失败: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
@@ -1410,75 +1528,68 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
 @app.post("/api/agent/auth/refresh")
 async def refresh_token(current_user: Dict = Depends(get_current_user)):
     """
-    刷新 Token - 调用现有后端获取新 token
+    刷新 Token - 基于当前JWT生成新token
     
     前端检测到 token 即将过期时自动调用
+    不依赖内存缓存，避免服务重启后丢失状态
     """
     try:
         username = current_user.get("username") or current_user.get("sub")
+        user_id = current_user.get("user_id") or current_user.get("employee_id")
         
-        # 从存储中获取当前 token
-        current_token = get_user_token(username)
-        if not current_token:
-            raise HTTPException(status_code=401, detail="未找到登录状态")
+        if not username:
+            raise HTTPException(status_code=401, detail="无效的用户信息")
         
-        # 调用现有后端的 refresh 接口获取新 token
+        # 直接生成新的 JWT token（不依赖缓存）
+        access_token_expires = timedelta(hours=8)
+        new_token = create_access_token(
+            data={"sub": username, "user_id": user_id},
+            expires_delta=access_token_expires
+        )
+        
+        # 更新缓存（如果缓存存在）
         try:
-            response = await http_client.post(
-                f"{settings.BACKEND_API_URL}/api/v1/auth/refresh",
-                headers={"Authorization": f"Bearer {current_token}"},
-                timeout=10.0
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                new_token = data.get("data", {}).get("access_token") or data.get("access_token")
-                
-                if new_token:
-                    # 更新本地缓存的 token
-                    store_user_token(username, new_token)
-                    
-                    # 获取用户信息
-                    user_info = await get_user_info(new_token)
-                    
-                    return {
-                        "access_token": new_token,
-                        "token_type": "bearer",
-                        "user": {
-                            "id": user_info.get("employee_id"),
-                            "name": user_info.get("name"),
-                            "username": username,
-                            "role_id": user_info.get("role_id")
-                        }
-                    }
-                else:
-                    logger.exception(f" {data}")
-            else:
-                logger.warning(f" 刷新失败，状态码: {response.status_code}")
-                # 如果现有后端返回 401，说明 token 完全失效，需要重新登录
-                if response.status_code == 401:
-                    raise HTTPException(status_code=401, detail="登录已过期，请重新登录")
-        except httpx.HTTPError as e:
-            logger.error(f" {e}")
+            store_user_token(username, new_token)
+        except:
+            pass  # 缓存失败不影响token生成
         
-        # 如果刷新失败，尝试返回当前 token（降级处理）
-        user_info = await get_user_info(current_token)
+        # 获取用户信息
+        user_info = get_user_info_cache(username)
+        if not user_info:
+            try:
+                with get_connection() as conn:
+                    result = conn.execute(text("""
+                        SELECT employee_id, name, department, position
+                        FROM personnel WHERE employee_id = :username
+                    """), {"username": username}).fetchone()
+                    
+                    if result:
+                        user_info = {
+                            "employee_id": result[0],
+                            "name": result[1],
+                            "department": result[2],
+                            "position": result[3]
+                        }
+                        # 更新缓存
+                        cache_manager.store_user_info(username, user_info)
+            except Exception as e:
+                logger.warning(f"获取用户信息失败: {e}")
+        
         return {
-            "access_token": current_token,
+            "access_token": new_token,
             "token_type": "bearer",
             "user": {
-                "id": user_info.get("employee_id"),
-                "name": user_info.get("name"),
-                "username": username,
-                "role_id": user_info.get("role_id")
+                "id": user_id,
+                "name": user_info.get("name") if user_info else username,
+                "username": username
             }
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f" {e}")
-        raise HTTPException(status_code=500, detail=f"刷新失败: {str(e)}")
+        logger.exception(f"刷新token失败: {e}")
+        raise HTTPException(status_code=401, detail="刷新token失败")
 
 
 @app.put("/api/agent/auth/push-token")
@@ -3185,26 +3296,93 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
     项目经理只能看到自己负责的项目
     """
     username = current_user.get("username")
-    token = get_user_token(username)
-
-    logger.debug(f"获取项目: username={username}, token存在={bool(token)}")
-
-    if token:
-        # 获取用户信息
-        user_info = get_user_info_cache(username)
-        if not user_info:
-            user_info = await get_user_info(token)
-            if user_info:
-                cache_manager.store_user_info(username, user_info)
-
-        # 使用用户token获取项目列表，并过滤
-        projects = await get_projects_with_auth(token, user_info)
-        logger.debug(f"获取到项目数量: {len(projects)}")
-    else:
-        # 降级：使用缓存
-        projects = await get_cached_projects()
-
-    return [ProjectInfo(**p) for p in projects]
+    
+    # 直接从数据库查询用户信息，不依赖内存缓存（避免多worker不一致）
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    with get_connection() as conn:
+        # 查询用户角色（从 personnel 表获取 role_id）
+        user_result = conn.execute(text("""
+            SELECT p.employee_id, p.name, p.department, p.role_id
+            FROM personnel p
+            WHERE p.employee_id = :username
+        """), {"username": username}).fetchone()
+        
+        if not user_result:
+            raise HTTPException(status_code=401, detail="用户不存在")
+        
+        user_info = {
+            "employee_id": user_result[0],
+            "name": user_result[1],
+            "department": user_result[2],
+            "role_id": user_result[3]
+        }
+        
+        role_id = user_info.get("role_id")
+        employee_name = user_info.get("name", "")
+        
+        # 根据角色查询项目
+        if role_id == 11:  # 管理员
+            logger.debug(f"管理员用户 {employee_name}，返回所有项目")
+            result = conn.execute(text("""
+                SELECT id, name, leader, status FROM projects
+                WHERE is_deleted = false ORDER BY id
+            """))
+        else:
+            logger.debug(f"普通用户 {employee_name}，查询负责的项目")
+            result = conn.execute(text("""
+                SELECT id, name, leader, status FROM projects
+                WHERE is_deleted = false AND leader = :emp_name
+                ORDER BY id
+            """), {"emp_name": employee_name})
+        
+        # 计算每个项目的进度
+        projects = []
+        for row in result:
+            project_id = row[0]
+            try:
+                task_stats = conn.execute(text("""
+                    SELECT
+                        COUNT(*) as total_tasks,
+                        SUM(CASE WHEN progress >= 100 THEN 1 ELSE 0 END) as completed_tasks,
+                        AVG(progress) as avg_progress
+                    FROM project_tasks
+                    WHERE project_id = CAST(:pid AS VARCHAR)
+                      AND is_deleted = false
+                      AND is_latest = true
+                """), {"pid": project_id})
+                ts = task_stats.fetchone()
+                
+                total_tasks = int(ts[0] or 0)
+                completed_tasks = int(ts[1] or 0)
+                avg_progress = float(ts[2] or 0)
+                
+                # 进度 = (完成任务数/总任务数 * 100 + 平均进度) / 2
+                if total_tasks > 0:
+                    progress = round((completed_tasks / total_tasks * 100 + avg_progress) / 2, 1)
+                else:
+                    progress = 0
+                
+                projects.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "leader": row[2],
+                    "status": row[3],
+                    "progress": progress
+                })
+            except Exception as e:
+                logger.warning(f"计算项目进度失败: {e}")
+                projects.append({
+                    "id": row[0],
+                    "name": row[1],
+                    "leader": row[2],
+                    "status": row[3],
+                    "progress": 0
+                })
+        
+        logger.debug(f"返回项目数: {len(projects)}")
+        return [ProjectInfo(**p) for p in projects]
 
 
 @app.get("/api/agent/projects/{project_id}")
@@ -3789,6 +3967,42 @@ def execute_query(tool_name: str, params: dict) -> str:
                     "assignee": r[3], "end_date": str(r[4]) if r[4] else None, "status": r[5]
                 } for r in result], ensure_ascii=False)
 
+            elif tool_name == "query_project_tasks_by_id":
+                project_id = params.get("project_id")
+                if not project_id:
+                    return json.dumps({"error": "缺少 project_id 参数"}, ensure_ascii=False)
+                
+                sql = """
+                    SELECT pt.task_id, pt.task_name, pt.assignee, pt.status, 
+                           pt.progress, pt.start_date, pt.end_date
+                    FROM project_tasks pt
+                    WHERE pt.is_deleted = false
+                      AND CAST(pt.project_id AS INTEGER) = :pid
+                """
+                conditions = []
+                if params.get("status"):
+                    status = params["status"]
+                    today = datetime.now().date()
+                    if status == "延期":
+                        conditions.append("pt.end_date < CURRENT_DATE AND (pt.progress < 100 OR pt.progress IS NULL)")
+                    elif status == "已完成":
+                        conditions.append("pt.progress >= 100")
+                    elif status == "进行中":
+                        conditions.append("(pt.progress > 0 AND pt.progress < 100)")
+                    elif status == "未开始":
+                        conditions.append("(pt.progress = 0 OR pt.progress IS NULL)")
+                if conditions:
+                    sql += " AND " + " AND ".join(conditions)
+                sql += " ORDER BY pt.task_id LIMIT 100"
+
+                result = conn.execute(text(sql), {"pid": int(project_id)})
+                return json.dumps([{
+                    "task_id": r[0], "task_name": r[1], "assignee": r[2],
+                    "status": r[3], "progress": float(r[4] or 0),
+                    "start_date": str(r[5]) if r[5] else None,
+                    "end_date": str(r[6]) if r[6] else None
+                } for r in result], ensure_ascii=False)
+
             elif tool_name == "query_risks":
                 sql = """
                     SELECT p.name, p.leader, COUNT(*) as delayed_count
@@ -3923,12 +4137,16 @@ TOOL_DESCRIPTIONS = """
 2. query_tasks(assignee, days) - 查询任务
    参数：assignee(负责人姓名), days(未来N天)
 
-3. query_risks() - 查询延期风险项目
+3. query_project_tasks_by_id(project_id, status) - 查询指定项目的任务
+   参数：project_id(项目ID，整数), status(任务状态：进行中/已完成/延期/未开始)
+   用途：查询某个具体项目的任务列表、负责人、进度等
 
-4. query_work_hours(employee_name, month) - 查询工时
+4. query_risks() - 查询延期风险项目
+
+5. query_work_hours(employee_name, month) - 查询工时
    参数：employee_name(员工姓名), month(月份YYYY-MM)
 
-5. query_goals(employee_name) - 查询月度目标
+6. query_goals(employee_name) - 查询月度目标
    参数：employee_name(员工姓名)
 """
 
@@ -4990,17 +5208,61 @@ async def get_team_goals_progress(current_user: Dict = Depends(get_current_user)
 
 # ============== 会话存储 ==============
 
-# 内存会话存储（生产环境用Redis）
+# 内存会话存储（作为二级缓存）
 _session_store: Dict[str, List] = {}
 
 def get_session_history(session_id: str) -> List:
-    """获取会话历史"""
-    return _session_store.get(session_id, [])
+    """获取会话历史（优先数据库）"""
+    # 先查内存缓存
+    if session_id in _session_store:
+        return _session_store[session_id]
+    
+    # 内存未命中，从数据库加载
+    try:
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT messages FROM chat_sessions 
+                WHERE session_key = :key
+            """), {"key": session_id})
+            row = result.fetchone()
+            if row and row[0]:
+                messages_data = row[0] if isinstance(row[0], list) else json.loads(row[0])
+                history = [
+                    HumanMessage(content=m["content"]) if m["type"] == "human"
+                    else AIMessage(content=m["content"])
+                    for m in messages_data
+                ]
+                _session_store[session_id] = history
+                return history
+    except Exception as e:
+        logger.error(f"获取会话历史失败: {e}")
+    
+    return []
 
 def save_session_history(session_id: str, messages: List):
-    """保存会话历史"""
+    """保存会话历史（内存 + 数据库）"""
     # 只保留最近10轮对话
-    _session_store[session_id] = messages[-20:]
+    history = messages[-20:]
+    _session_store[session_id] = history
+    
+    # 持久化到数据库
+    try:
+        messages_data = [
+            {"type": "human" if isinstance(m, HumanMessage) else "ai", "content": m.content}
+            for m in history
+        ]
+        
+        with get_connection() as conn:
+            # 使用 CAST 而非 ::jsonb，避免 SQLAlchemy text() 解析问题
+            conn.execute(text("""
+                INSERT INTO chat_sessions (session_key, session_type, user_id, messages, updated_at)
+                VALUES (:key, 'general', :key, CAST(:messages AS jsonb), NOW())
+                ON CONFLICT (session_key) 
+                DO UPDATE SET messages = CAST(:messages AS jsonb), updated_at = NOW()
+            """), {"key": session_id, "messages": json.dumps(messages_data)})
+            conn.commit()
+    except Exception as e:
+        logger.error(f"保存会话历史失败: {e}")
 
 
 def generate_project_context(project_id: int, engine) -> str:
@@ -5114,8 +5376,8 @@ async def chat(
 
     支持自然语言查询项目、任务、风险、工时、文档知识库等
     """
-    message = request.get("message", "")
-    session_id = request.get("session_id", "default")
+    message = req.get("message", "")
+    session_id = req.get("session_id", "default")
     if not message:
         raise HTTPException(status_code=400, detail="请输入问题")
 
@@ -5214,11 +5476,28 @@ async def chat(
             logger.error(f" {e}")
 
         # ========== 第二步：意图识别与工具调用 ==========
+        # 构建对话上下文摘要（帮助意图识别理解代词和指代）
+        recent_context = ""
+        if history:
+            recent_context = "\n\n最近对话：\n" + "\n".join([
+                f"{'用户' if isinstance(m, HumanMessage) else '助手'}: {m.content[:150]}"
+                for m in history[-4:]
+            ])
+
+        # 如果匹配到了项目，告诉AI项目ID（方便追问时定位）
+        project_hint = ""
+        matched_project_ids = [p["id"] for p in matched_projects] if matched_projects else []
+        if matched_project_ids:
+            project_hint = f"\n\n当前讨论的项目ID: {matched_project_ids[0]}"
+            if len(matched_project_ids) > 1:
+                project_hint = f"\n\n当前讨论的项目ID列表: {matched_project_ids}"
+
         analysis_prompt = f"""你是一个项目管理助手的意图识别模块。
 
 用户：{employee_name}
 问题：{message}
-
+{recent_context}
+{project_hint}
 {TOOL_DESCRIPTIONS}
 
 请分析用户意图，以JSON格式返回：
@@ -5228,6 +5507,12 @@ async def chat(
   "summary": "一句话说明你要查什么"
 }}
 
+注意：
+- 如果问题包含代词（它、它们、这个等），结合最近对话理解指代对象
+- 例如：上文讨论"Demo项目"后问"它的进度"，应查询项目进度
+- 例如：上文讨论"任务列表"后问"它们谁负责"，应使用 query_project_tasks_by_id 并带上项目ID
+- 如果知道项目ID，优先使用 query_project_tasks_by_id 而非 query_tasks
+
 只返回JSON，不要其他内容。"""
 
         # 构建消息列表（包含历史）
@@ -5236,7 +5521,7 @@ async def chat(
             messages.append(msg)
         messages.append(HumanMessage(content=analysis_prompt))
 
-        analysis_response = llm.invoke(messages)
+        analysis_response = await llm_invoke_threaded(messages)
         analysis_text = analysis_response.content.strip()
 
         # 解析JSON
@@ -5262,6 +5547,26 @@ async def chat(
             data = json.loads(tool_result)
 
         # ========== 第三步：生成回答 ==========
+        # 提取对话中的关键实体（用于上下文理解）
+        entities_mentioned = []
+        if history:
+            # 从最近对话中提取可能的项目名、任务名等
+            for m in history[-4:]:
+                content = m.content
+                # 简单提取：找到引号中的内容、特定项目名等
+                import re
+                # 匹配 "xxx项目" 或 "xxx任务"
+                project_matches = re.findall(r'[""「]([^""」]+)[""」]|(\S+项目)', content)
+                for match in project_matches:
+                    entity = match[0] or match[1]
+                    if entity and entity not in entities_mentioned:
+                        entities_mentioned.append(entity)
+
+        # 构建实体提示
+        entity_hint = ""
+        if entities_mentioned:
+            entity_hint = f"\n\n对话中提到的关键实体：{', '.join(entities_mentioned[:3])}"
+
         history_context = ""
         if history:
             history_context = "\n\n历史对话摘要：\n" + "\n".join([
@@ -5293,17 +5598,19 @@ async def chat(
 用户：{employee_name}
 问题：{message}
 {history_context}
+{entity_hint}
 
 {context_str}
 
 请用简洁的自然语言回答用户问题。要点：
-1. 如果文档中有相关信息，优先基于文档回答
-2. 补充数据库中的相关数据
-3. 如有风险或异常，主动提示
-4. 控制在3-5句话
-5. 如果引用了文档，在回答末尾标注来源"""
+1. **优先结合对话上下文**：如果问题包含"它""它们""这个"等代词，根据历史对话理解指代
+2. 如果文档中有相关信息，优先基于文档回答
+3. 补充数据库中的相关数据
+4. 如有风险或异常，主动提示
+5. 控制在3-5句话
+6. 如果引用了文档，在回答末尾标注来源"""
 
-        final_response = llm.invoke([HumanMessage(content=answer_prompt)])
+        final_response = await llm_invoke_threaded([HumanMessage(content=answer_prompt)])
 
         # 保存会话历史
         history.append(HumanMessage(content=message))
@@ -5470,7 +5777,54 @@ async def list_scheduled_jobs(current_user: Dict = Depends(get_current_user)):
 
 
 # ========== 项目智能问答API ==========
-# 存储项目对话历史
+
+def get_chat_history(project_id: int, user_id: str) -> List:
+    """从数据库获取对话历史"""
+    session_key = f"project_{project_id}_{user_id}"
+    try:
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT messages FROM chat_sessions 
+                WHERE session_key = :key
+            """), {"key": session_key})
+            row = result.fetchone()
+            if row and row[0]:
+                # 从 JSON 反序列化为消息对象
+                messages_data = row[0] if isinstance(row[0], list) else json.loads(row[0])
+                return [
+                    HumanMessage(content=m["content"]) if m["type"] == "human"
+                    else AIMessage(content=m["content"])
+                    for m in messages_data
+                ]
+    except Exception as e:
+        logger.error(f"获取对话历史失败: {e}")
+    return []
+
+
+def save_chat_history(project_id: int, user_id: str, history: List):
+    """保存对话历史到数据库"""
+    session_key = f"project_{project_id}_{user_id}"
+    try:
+        # 序列化为 JSON
+        messages_data = [
+            {"type": "human" if isinstance(m, HumanMessage) else "ai", "content": m.content}
+            for m in history
+        ]
+        
+        with get_connection() as conn:
+            # 使用 CAST 而非 ::jsonb，避免 SQLAlchemy text() 解析问题
+            conn.execute(text("""
+                INSERT INTO chat_sessions (session_key, session_type, project_id, user_id, messages, updated_at)
+                VALUES (:key, 'project', :pid, :uid, CAST(:messages AS jsonb), NOW())
+                ON CONFLICT (session_key) 
+                DO UPDATE SET messages = CAST(:messages AS jsonb), updated_at = NOW()
+            """), {"key": session_key, "pid": project_id, "uid": user_id, "messages": json.dumps(messages_data)})
+            conn.commit()
+    except Exception as e:
+        logger.error(f"保存对话历史失败: {e}")
+
+
+# 内存缓存（启动时为空，作为二级缓存）
 _project_session_store: Dict[str, List] = {}
 
 
@@ -5497,9 +5851,13 @@ async def project_chat(
         user_info = get_user_info_cache(username)
         employee_name = user_info.get("name", username) if user_info else username
 
-        # 获取项目对话历史
+        # 获取项目对话历史（优先数据库，回退内存缓存）
         session_key = f"project_{project_id}_{username}_{session_id}"
-        history = _project_session_store.get(session_key, [])
+        history = _project_session_store.get(session_key)
+        if history is None:
+            # 内存缓存未命中，从数据库加载
+            history = get_chat_history(project_id, username)
+            _project_session_store[session_key] = history
 
         # ========== 第一步：动态生成项目背景 ==========
         engine = get_db_engine()
@@ -5560,7 +5918,7 @@ async def project_chat(
 """
 
         messages = history[-4:] + [HumanMessage(content=analysis_prompt)]
-        analysis_response = llm.invoke(messages)
+        analysis_response = await llm_invoke_threaded(messages)
         analysis_text = analysis_response.content.strip()
 
         # 解析JSON
@@ -5692,13 +6050,15 @@ async def project_chat(
 请用简洁的自然语言回答。如果涉及具体数据，请准确引用。"""
 
         messages = history[-4:] + [HumanMessage(content=answer_prompt)]
-        final_response = llm.invoke(messages)
+        final_response = await llm_invoke_threaded(messages)
         answer = final_response.content
 
-        # 保存对话历史
+        # 保存对话历史（内存 + 数据库持久化）
         history.append(HumanMessage(content=message))
         history.append(AIMessage(content=answer))
-        _project_session_store[session_key] = history[-20:]  # 保留最近10轮
+        history = history[-20:]  # 保留最近10轮
+        _project_session_store[session_key] = history
+        save_chat_history(project_id, username, history)  # 持久化到数据库
 
         return {
             "success": True,
@@ -6957,8 +7317,12 @@ async def generate_weekly_report(
             # 整理数据
             daily_data = []
             project_stats = {}
+            employee_name_from_data = None  # 从日报中获取用户姓名
             
             for row in result:
+                if not employee_name_from_data and row[1]:
+                    employee_name_from_data = row[1]
+                    
                 daily_data.append({
                     "date": str(row[0]),
                     "employee": row[1],
@@ -6988,12 +7352,12 @@ async def generate_weekly_report(
                     "message": f"该时间段({week_start} ~ {week_end})没有日报数据"
                 }
             
-            # 使用 DeepSeek AI 生成周报摘要
+            # 使用 DeepSeek AI 生成周报摘要（线程池执行，不阻塞Worker）
             from langchain_deepseek import ChatDeepSeek
             
             api_key = os.getenv("DEEPSEEK_API_KEY", "")
             
-            llm = ChatDeepSeek(
+            weekly_llm = ChatDeepSeek(
                 model="deepseek-chat",
                 api_key=api_key,
                 temperature=0.3
@@ -7029,7 +7393,7 @@ async def generate_weekly_report(
 }}
 """
 
-            response = llm.invoke([HumanMessage(content=prompt)])
+            response = await run_in_thread(weekly_llm.invoke, [HumanMessage(content=prompt)])
             content = response.content.strip()
             
             # 解析 AI 返回
@@ -7042,18 +7406,21 @@ async def generate_weekly_report(
             
             # 保存到数据库
             username = current_user.get("username", "system")
+            # 优先使用日报中的姓名，其次使用 current_user 中的信息
+            employee_name = employee_name_from_data or current_user.get("name") or current_user.get("employee_name") or username
             saved_reports = []
             
             for pid, stats in project_stats.items():
-                if pid == "unknown":
-                    continue
+                # 对于没有 project_id 的记录，使用 project_name 或 "个人工作" 作为标识
+                save_pid = pid if pid != "unknown" else f"personal_{username}"
+                save_pname = stats["name"] if stats["name"] != "未分配项目" else f"{employee_name} 个人工作"
                     
                 # 检查是否已存在
                 existing = conn.execute(text("""
                     SELECT id FROM weekly_reports
                     WHERE project_id = :project_id AND week_start = :week_start
                     AND is_deleted = false
-                """), {"project_id": pid, "week_start": week_start})
+                """), {"project_id": save_pid, "week_start": week_start})
                 
                 if existing.fetchone():
                     # 更新
@@ -7066,7 +7433,7 @@ async def generate_weekly_report(
                         "summary": ai_result.get("summary", ""),
                         "hours": stats["total_hours"],
                         "count": stats["task_count"],
-                        "project_id": pid,
+                        "project_id": save_pid,
                         "week_start": week_start
                     })
                 else:
@@ -7078,8 +7445,8 @@ async def generate_weekly_report(
                         VALUES (:project_id, :project_name, :week_start, :week_end, :summary,
                          :hours, :count, :analysis, NOW(), :created_by, false)
                     """), {
-                        "project_id": pid,
-                        "project_name": stats["name"],
+                        "project_id": save_pid,
+                        "project_name": save_pname,
                         "week_start": week_start,
                         "week_end": week_end,
                         "summary": ai_result.get("summary", ""),
@@ -7090,8 +7457,8 @@ async def generate_weekly_report(
                     })
                 
                 saved_reports.append({
-                    "project_id": pid,
-                    "project_name": stats["name"],
+                    "project_id": save_pid,
+                    "project_name": save_pname,
                     "week_start": week_start,
                     "week_end": week_end,
                     "total_hours": stats["total_hours"],
@@ -7224,3 +7591,738 @@ async def download_plan_file(version_id: int, current_user: Dict = Depends(get_c
             filename=file_name,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+# ==================== 质量管理 API ====================
+
+@app.get("/api/agent/quality/overview")
+async def get_quality_overview(current_user: dict = Depends(get_current_user)):
+    """
+    质量概览 - 六西格玛指标
+    - DPMO 计算
+    - 西格玛水平
+    - 缺陷分布
+    """
+    from sqlalchemy import text
+    try:
+        with get_connection() as conn:
+            # 1. 统计总任务数（机会数）- 动态计算状态
+            task_sql = text("""
+                SELECT 
+                    COUNT(*) as total,
+                    SUM(CASE WHEN progress >= 100 THEN 1 ELSE 0 END) as completed,
+                    SUM(CASE WHEN progress > 0 AND progress < 100 THEN 1 ELSE 0 END) as ongoing,
+                    SUM(CASE WHEN (progress = 0 OR progress IS NULL) AND (start_date IS NULL OR start_date > CURRENT_DATE) THEN 1 ELSE 0 END) as pending,
+                    SUM(CASE WHEN end_date < CURRENT_DATE AND (progress < 100 OR progress IS NULL) THEN 1 ELSE 0 END) as delayed
+                FROM project_tasks
+                WHERE is_latest = true AND is_deleted = false
+            """)
+            task_result = conn.execute(task_sql).fetchone()
+            total_tasks = task_result[0] or 1
+            completed_tasks = task_result[1] or 0
+            ongoing_tasks = task_result[2] or 0
+            pending_tasks = task_result[3] or 0
+            delayed_tasks = task_result[4] or 0
+            
+            # 2. 统计超支项目数
+            cost_sql = text("""
+                SELECT COUNT(*) as total,
+                       SUM(CASE WHEN actual_total_cost > budget_total_cost * 1.1 THEN 1 ELSE 0 END) as overbudget
+                FROM projects
+                WHERE is_deleted = false
+                  AND budget_total_cost > 0
+                  AND actual_total_cost > 0
+            """)
+            cost_result = conn.execute(cost_sql).fetchone()
+            cost_projects = cost_result[0] or 1
+            overbudget_projects = cost_result[1] or 0
+            
+            # 3. 缺陷定义 - 动态计算严重延期
+            # - 延期 > 3天的任务 = 缺陷
+            defect_task_sql = text("""
+                SELECT COUNT(*) 
+                FROM project_tasks
+                WHERE is_latest = true 
+                  AND is_deleted = false
+                  AND end_date < CURRENT_DATE - INTERVAL '3 days'
+                  AND (progress < 100 OR progress IS NULL)
+            """)
+            severe_delayed = conn.execute(defect_task_sql).scalar() or 0
+            
+            # 4. 计算总机会数和缺陷数
+            total_opportunities = total_tasks + cost_projects
+            total_defects = severe_delayed + overbudget_projects
+            
+            # 5. 计算 DPMO
+            dpmo = (total_defects / total_opportunities * 1000000) if total_opportunities > 0 else 0
+            
+            # 6. 西格玛水平（简化对照表）
+            def get_sigma_level(dpmo: float) -> float:
+                if dpmo <= 3.4:
+                    return 6.0
+                elif dpmo <= 233:
+                    return 5.5
+                elif dpmo <= 6210:
+                    return 4.5
+                elif dpmo <= 66800:
+                    return 3.5
+                elif dpmo <= 308000:
+                    return 2.5
+                elif dpmo <= 690000:
+                    return 1.5
+                else:
+                    return 1.0
+            
+            sigma_level = get_sigma_level(dpmo)
+            
+            # 7. 按项目统计缺陷 - 动态计算延期
+            project_defects_sql = text("""
+                SELECT 
+                    p.id as project_id,
+                    p.name as project_name,
+                    p.leader,
+                    COUNT(t.task_id) as total_tasks,
+                    SUM(CASE WHEN t.end_date < CURRENT_DATE AND (t.progress < 100 OR t.progress IS NULL) 
+                             THEN 1 ELSE 0 END) as delayed_tasks,
+                    SUM(CASE WHEN t.end_date < CURRENT_DATE - INTERVAL '3 days' 
+                             AND (t.progress < 100 OR t.progress IS NULL)
+                             THEN 1 ELSE 0 END) as severe_delayed,
+                    CASE WHEN p.actual_total_cost > p.budget_total_cost * 1.1 THEN 1 ELSE 0 END as cost_overrun
+                FROM projects p
+                LEFT JOIN project_tasks t ON t.project_id = CAST(p.id AS VARCHAR) 
+                    AND t.is_latest = true AND t.is_deleted = false
+                WHERE p.is_deleted = false
+                GROUP BY p.id, p.name, p.leader, p.budget_total_cost, p.actual_total_cost
+                HAVING SUM(CASE WHEN t.end_date < CURRENT_DATE AND (t.progress < 100 OR t.progress IS NULL) THEN 1 ELSE 0 END) > 0
+                   OR (p.actual_total_cost > p.budget_total_cost * 1.1 AND p.budget_total_cost > 0)
+                ORDER BY (SUM(CASE WHEN t.end_date < CURRENT_DATE AND (t.progress < 100 OR t.progress IS NULL) THEN 1 ELSE 0 END) + 
+                         CASE WHEN p.actual_total_cost > p.budget_total_cost * 1.1 THEN 1 ELSE 0 END) DESC
+                LIMIT 10
+            """)
+            project_defects = []
+            for row in conn.execute(project_defects_sql):
+                total_project_defects = (row[4] or 0) + (row[6] or 0)  # 延期 + 超支
+                if total_project_defects > 0:
+                    project_defects.append({
+                        "project_id": row[0],
+                        "project_name": row[1],
+                        "leader": row[2],
+                        "total_tasks": row[3] or 0,
+                        "delayed_tasks": row[4] or 0,
+                        "severe_delayed": row[5] or 0,
+                        "cost_overrun": row[6] or 0,
+                        "total_defects": total_project_defects
+                    })
+            
+            # 8. 缺陷趋势（近6周）
+            trend_sql = text("""
+                SELECT 
+                    DATE_TRUNC('week', update_time)::date as week_start,
+                    COUNT(*) as new_tasks,
+                    SUM(CASE WHEN status = '延期' THEN 1 ELSE 0 END) as new_delayed
+                FROM project_tasks
+                WHERE update_time >= CURRENT_DATE - INTERVAL '6 weeks'
+                  AND is_deleted = false
+                GROUP BY DATE_TRUNC('week', update_time)::date
+                ORDER BY week_start
+            """)
+            defect_trend = []
+            for row in conn.execute(trend_sql):
+                defect_trend.append({
+                    "week": row[0].strftime("%m/%d") if row[0] else "-",
+                    "new_tasks": row[1] or 0,
+                    "new_delayed": row[2] or 0
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "summary": {
+                        "total_tasks": total_tasks,
+                        "total_opportunities": total_opportunities,
+                        "total_defects": total_defects,
+                        "dpmo": round(dpmo, 1),
+                        "sigma_level": sigma_level,
+                        "defect_rate": round((total_defects / total_opportunities * 100), 2) if total_opportunities > 0 else 0
+                    },
+                    "breakdown": {
+                        "delayed_defects": severe_delayed,
+                        "total_delayed": delayed_tasks,
+                        "overbudget_defects": overbudget_projects,
+                        "total_cost_projects": cost_projects,
+                        "severe_delayed": severe_delayed
+                    },
+                    "status_distribution": {
+                        "completed": completed_tasks,
+                        "ongoing": ongoing_tasks,
+                        "pending": pending_tasks,
+                        "delayed": delayed_tasks
+                    },
+                    "project_defects": project_defects,
+                    "defect_trend": defect_trend,
+                    "formulas": {
+                        "dpmo": "DPMO = (缺陷数 / 总机会数) × 1,000,000",
+                        "defect_definition": "缺陷标准：任务延期>3天 或 成本超支>10%",
+                        "sigma_table": "1σ=690000, 2σ=308000, 3σ=66800, 4σ=6210, 5σ=233, 6σ=3.4"
+                    }
+                }
+            }
+    except Exception as e:
+        logger.exception(f"获取质量概览失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/agent/quality/project/{project_id}")
+async def get_project_quality_detail(
+    project_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    单项目质量详情
+    """
+    from sqlalchemy import text
+    try:
+        with get_connection() as conn:
+            # 项目基本信息
+            project_sql = text("""
+                SELECT id, name, leader, progress, budget_total_cost, actual_total_cost,
+                       start_date, end_date
+                FROM projects
+                WHERE id = :pid AND is_deleted = false
+            """)
+            project = conn.execute(project_sql, {"pid": project_id}).fetchone()
+            if not project:
+                return {"success": False, "error": "项目不存在"}
+            
+            # 任务缺陷分析 - 动态计算延期状态
+            task_sql = text("""
+                SELECT 
+                    task_id, task_name, status, progress, start_date, end_date,
+                    CASE 
+                        WHEN end_date < CURRENT_DATE - INTERVAL '3 days' AND (progress < 100 OR progress IS NULL)
+                        THEN 'severe'
+                        WHEN end_date < CURRENT_DATE AND (progress < 100 OR progress IS NULL) THEN 'minor'
+                        ELSE 'ok'
+                    END as defect_level,
+                    CASE WHEN end_date < CURRENT_DATE THEN CURRENT_DATE - end_date ELSE 0 END as delay_days
+                FROM project_tasks
+                WHERE project_id = CAST(:pid AS VARCHAR) AND is_latest = true AND is_deleted = false
+                ORDER BY 
+                    CASE WHEN end_date < CURRENT_DATE AND (progress < 100 OR progress IS NULL) THEN 0 ELSE 1 END,
+                    end_date DESC
+            """)
+            tasks = []
+            defects = []
+            for row in conn.execute(task_sql, {"pid": project_id}):
+                task_info = {
+                    "task_id": row[0],
+                    "task_name": row[1],
+                    "status": row[2],
+                    "progress": row[3],
+                    "start_date": str(row[4]) if row[4] else None,
+                    "end_date": str(row[5]) if row[5] else None,
+                    "defect_level": row[6],
+                    "delay_days": row[7] if row[7] and row[7] > 0 else None
+                }
+                tasks.append(task_info)
+                if row[6] != 'ok':
+                    defects.append(task_info)
+            
+            # 成本分析
+            budget = float(project[4] or 0)
+            actual = float(project[5] or 0)
+            cost_overrun = actual > budget * 1.1 if budget > 0 else False
+            cost_variance = ((actual - budget) / budget * 100) if budget > 0 else 0
+            
+            return {
+                "success": True,
+                "data": {
+                    "project": {
+                        "id": project[0],
+                        "name": project[1],
+                        "leader": project[2],
+                        "progress": float(project[3] or 0),
+                        "budget": budget,
+                        "actual": actual,
+                        "cost_variance": round(cost_variance, 2),
+                        "cost_overrun": cost_overrun
+                    },
+                    "tasks": tasks,
+                    "defects": defects,
+                    "defect_count": len(defects),
+                    "total_tasks": len(tasks),
+                    "recommendations": generate_quality_recommendations(defects, cost_overrun, cost_variance)
+                }
+            }
+    except Exception as e:
+        logger.exception(f"获取项目质量详情失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def generate_quality_recommendations(defects: list, cost_overrun: bool, cost_variance: float) -> list:
+    """生成质量改进建议"""
+    recommendations = []
+    
+    if len(defects) > 0:
+        severe_count = sum(1 for d in defects if d.get('defect_level') == 'severe')
+        if severe_count > 0:
+            recommendations.append({
+                "priority": "high",
+                "type": "schedule",
+                "message": f"有 {severe_count} 个任务严重延期（>3天），建议立即review项目计划"
+            })
+        
+        recommendations.append({
+            "priority": "medium",
+            "type": "process",
+            "message": "建议进行根因分析，识别延期原因（资源不足/估算偏差/需求变更）"
+        })
+    
+    if cost_overrun:
+        recommendations.append({
+            "priority": "high",
+            "type": "cost",
+            "message": f"成本超支 {abs(cost_variance):.1f}%，建议审查支出明细"
+        })
+    
+    return recommendations
+
+
+# ==================== 质量帕累托分析 ====================
+
+@app.get("/api/agent/quality/pareto")
+async def get_quality_pareto(current_user: dict = Depends(get_current_user)):
+    """
+    帕累托分析 - 80/20 规律
+    
+    返回：
+    1. 项目缺陷帕累托 - 哪些项目贡献了大部分缺陷
+    2. 延期原因帕累托 - 延期的主要原因分布
+    3. 时间段帕累托 - 哪个时间段延期最多
+    """
+    from sqlalchemy import text
+    try:
+        with get_connection() as conn:
+            # 1. 项目缺陷帕累托（TOP 10）
+            project_pareto_sql = text("""
+                WITH project_defects AS (
+                    SELECT 
+                        p.id,
+                        p.name as project_name,
+                        p.leader,
+                        COUNT(t.task_id) as total_tasks,
+                        SUM(CASE WHEN t.end_date < CURRENT_DATE - INTERVAL '3 days' 
+                                 AND (t.progress < 100 OR t.progress IS NULL) THEN 1 ELSE 0 END) as severe_defects,
+                        SUM(CASE WHEN t.end_date < CURRENT_DATE 
+                                 AND (t.progress < 100 OR t.progress IS NULL) THEN 1 ELSE 0 END) as total_defects
+                    FROM projects p
+                    LEFT JOIN project_tasks t ON t.project_id = CAST(p.id AS VARCHAR)
+                        AND t.is_latest = true AND t.is_deleted = false
+                    WHERE p.is_deleted = false
+                    GROUP BY p.id, p.name, p.leader
+                ),
+                ranked AS (
+                    SELECT 
+                        project_name,
+                        leader,
+                        total_tasks,
+                        severe_defects,
+                        total_defects,
+                        ROW_NUMBER() OVER (ORDER BY total_defects DESC, project_name) as rn,
+                        SUM(total_defects) OVER () as total_all_defects
+                    FROM project_defects
+                    WHERE total_defects > 0
+                ),
+                cumulative AS (
+                    SELECT 
+                        project_name,
+                        leader,
+                        total_tasks,
+                        severe_defects,
+                        total_defects,
+                        SUM(total_defects) OVER (ORDER BY rn) as cum_defects,
+                        total_all_defects,
+                        rn
+                    FROM ranked
+                    ORDER BY rn
+                    LIMIT 10
+                )
+                SELECT 
+                    project_name,
+                    leader,
+                    total_tasks,
+                    severe_defects,
+                    total_defects,
+                    cum_defects,
+                    total_all_defects,
+                    ROUND(cum_defects * 100.0 / NULLIF(total_all_defects, 0), 1) as cumulative_pct
+                FROM cumulative
+            """)
+            
+            project_pareto = []
+            total_defects_count = 0
+            for row in conn.execute(project_pareto_sql):
+                total_defects_count = int(float(row[6] or 0))
+                project_pareto.append({
+                    "project_name": row[0],
+                    "leader": row[1] or "未分配",
+                    "total_tasks": int(float(row[2] or 0)),
+                    "severe_defects": int(float(row[3] or 0)),
+                    "total_defects": int(float(row[4] or 0)),
+                    "cumulative": int(float(row[5] or 0)),
+                    "cumulative_pct": float(row[7] or 0)
+                })
+            
+            # 2. 延期时间段帕累托（按延期天数分段 - 统一用周口径）
+            time_pareto_sql = text("""
+                SELECT 
+                    CASE 
+                        WHEN CURRENT_DATE - end_date <= 7 THEN '1周内'
+                        WHEN CURRENT_DATE - end_date <= 14 THEN '1-2周'
+                        WHEN CURRENT_DATE - end_date <= 28 THEN '2-4周'
+                        WHEN CURRENT_DATE - end_date <= 56 THEN '4-8周'
+                        ELSE '超过8周'
+                    END as delay_range,
+                    COUNT(*) as defect_count,
+                    ROUND(COUNT(*) * 100.0 / NULLIF(SUM(COUNT(*)) OVER(), 0), 1) as pct
+                FROM project_tasks
+                WHERE is_latest = true 
+                  AND is_deleted = false
+                  AND end_date < CURRENT_DATE 
+                  AND (progress < 100 OR progress IS NULL)
+                GROUP BY 
+                    CASE 
+                        WHEN CURRENT_DATE - end_date <= 7 THEN '1周内'
+                        WHEN CURRENT_DATE - end_date <= 14 THEN '1-2周'
+                        WHEN CURRENT_DATE - end_date <= 28 THEN '2-4周'
+                        WHEN CURRENT_DATE - end_date <= 56 THEN '4-8周'
+                        ELSE '超过8周'
+                    END
+                ORDER BY defect_count DESC
+            """)
+            
+            time_pareto = []
+            for row in conn.execute(time_pareto_sql):
+                time_pareto.append({
+                    "delay_range": row[0],
+                    "defect_count": int(float(row[1] or 0)),
+                    "percentage": float(row[2] or 0)
+                })
+            
+            # 3. 计算帕累托关键点（80% 临界点）
+            pareto_80_index = -1  # -1 表示未找到
+            for i, p in enumerate(project_pareto):
+                if p["cumulative_pct"] >= 80:
+                    pareto_80_index = i
+                    break
+            
+            # 4. 关键洞察
+            insights = []
+            if len(project_pareto) > 0:
+                # 如果达到80%累计，用实际项目数；否则用所有项目
+                if pareto_80_index >= 0:
+                    top_project_count = pareto_80_index + 1
+                    top_pct = project_pareto[pareto_80_index]["cumulative_pct"]
+                    insights.append({
+                        "type": "project_concentration",
+                        "message": f"前 {top_project_count} 个项目贡献了 {top_pct}% 的缺陷",
+                        "recommendation": "优先处理这些高风险项目可快速降低整体缺陷率"
+                    })
+                else:
+                    # 未达到80%，说明缺陷分散
+                    total_in_top10 = sum(int(p["total_defects"]) for p in project_pareto)
+                    total_all = int(total_defects_count)
+                    top10_pct = round(total_in_top10 * 100.0 / total_all, 1) if total_all > 0 else 0
+                    insights.append({
+                        "type": "project_concentration",
+                        "message": f"缺陷分布较分散，前 {len(project_pareto)} 个项目共贡献 {top10_pct}% 缺陷",
+                        "recommendation": "缺陷未集中，需全面关注各项目进度"
+                    })
+            
+            if len(time_pareto) > 0:
+                max_delay_range = time_pareto[0]["delay_range"]
+                max_delay_count = time_pareto[0]["defect_count"]
+                insights.append({
+                    "type": "delay_pattern",
+                    "message": f"延期主要集中在「{max_delay_range}」时段，共 {max_delay_count} 个任务",
+                    "recommendation": "分析该时间段的任务特征，找出共性原因"
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "project_pareto": project_pareto,
+                    "time_pareto": time_pareto,
+                    "pareto_80_index": pareto_80_index,
+                    "total_defects": total_defects_count,
+                    "insights": insights,
+                    "formulas": {
+                        "pareto_rule": "帕累托定律：20% 的原因贡献了 80% 的问题",
+                        "project_defect": "严重延期(>3天) + 一般延期",
+                        "focus_strategy": "优先解决 TOP 20% 项目 → 快速降低整体风险"
+                    }
+                }
+            }
+    except Exception as e:
+        logger.exception(f"获取帕累托分析失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+# ==================== 根因分析 API ====================
+
+@app.get("/api/agent/quality/analysis/{project_id}")
+async def analyze_project_defects(
+    project_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    AI 根因分析 - 分析项目延期原因
+    
+    使用 DeepSeek AI 分析：
+    1. 延期任务特征
+    2. 可能的延期原因
+    3. 改进建议
+    """
+    from sqlalchemy import text
+    try:
+        with get_connection() as conn:
+            # 1. 获取项目基本信息
+            project_sql = text("""
+                SELECT id, name, leader, progress, start_date, end_date,
+                       budget_total_cost, actual_total_cost
+                FROM projects
+                WHERE id = :pid AND is_deleted = false
+            """)
+            project = conn.execute(project_sql, {"pid": project_id}).fetchone()
+            if not project:
+                return {"success": False, "error": "项目不存在"}
+            
+            # 2. 获取延期任务详情
+            delayed_tasks_sql = text("""
+                SELECT 
+                    task_id, task_name, start_date, end_date,
+                    progress, assignee,
+                    CURRENT_DATE - end_date as delay_days
+                FROM project_tasks
+                WHERE project_id = CAST(:pid AS VARCHAR)
+                  AND is_latest = true
+                  AND is_deleted = false
+                  AND end_date < CURRENT_DATE
+                  AND (progress < 100 OR progress IS NULL)
+                ORDER BY end_date
+            """)
+            delayed_tasks = []
+            for row in conn.execute(delayed_tasks_sql, {"pid": project_id}):
+                delayed_tasks.append({
+                    "task_id": row[0],
+                    "task_name": row[1],
+                    "start_date": str(row[2]) if row[2] else None,
+                    "end_date": str(row[3]) if row[3] else None,
+                    "progress": float(row[4] or 0),
+                    "assignee": row[5],
+                    "delay_days": int(row[6] or 0)
+                })
+            
+            if len(delayed_tasks) == 0:
+                return {
+                    "success": True,
+                    "data": {
+                        "project_name": project[1],
+                        "has_defects": False,
+                        "message": "该项目当前无延期任务"
+                    }
+                }
+            
+            # 3. 统计延期特征
+            total_delayed = len(delayed_tasks)
+            avg_delay = sum(t["delay_days"] for t in delayed_tasks) / total_delayed
+            max_delay = max(t["delay_days"] for t in delayed_tasks)
+            assignees = list(set(t["assignee"] for t in delayed_tasks if t["assignee"]))
+            
+            # 4. AI 分析延期原因
+            analysis_prompt = f"""分析以下项目延期情况，给出延期原因分类和改进建议。
+
+项目名称：{project[1]}
+负责人：{project[2]}
+当前进度：{float(project[3] or 0):.1f}%
+
+延期任务数量：{total_delayed}
+平均延期天数：{avg_delay:.1f}天
+最长延期天数：{max_delay}天
+
+延期任务列表（前5个）：
+{chr(10).join(f"- {t['task_name']}（延期{t['delay_days']}天，负责人：{t['assignee'] or '未知'}）" for t in delayed_tasks[:5])}
+
+请分析：
+1. 主要延期原因（从以下分类选择：资源不足、估算偏差、需求变更、外部依赖、技术难点、沟通问题、其他）
+2. 每个原因的影响程度（高/中/低）
+3. 改进建议（具体可执行）
+
+请用JSON格式返回：
+{{
+  "reasons": [
+    {{"type": "原因类型", "impact": "影响程度", "detail": "具体说明"}}
+  ],
+  "recommendations": [
+    {{"action": "改进措施", "responsible": "责任人建议", "priority": "优先级"}}
+  ]
+}}
+"""
+            
+            # 调用 DeepSeek AI（线程池执行，不阻塞Worker）
+            try:
+                def _call_delay_analysis():
+                    from openai import OpenAI
+                    client = OpenAI(
+                        api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+                        base_url="https://api.deepseek.com"
+                    )
+                    return client.chat.completions.create(
+                        model="deepseek-chat",
+                        messages=[
+                            {"role": "system", "content": "你是项目管理专家，擅长分析项目延期原因并给出改进建议。"},
+                            {"role": "user", "content": analysis_prompt}
+                        ],
+                        temperature=0.7,
+                        max_tokens=1000
+                    )
+                
+                response = await run_in_thread(_call_delay_analysis)
+                
+                ai_response = response.choices[0].message.content
+                
+                # 解析 AI 返回
+                import json
+                import re
+                
+                # 提取 JSON 部分
+                json_match = re.search(r'\{[\s\S]*\}', ai_response)
+                if json_match:
+                    analysis_result = json.loads(json_match.group())
+                else:
+                    analysis_result = {
+                        "reasons": [{"type": "其他", "impact": "中", "detail": "AI 分析结果解析失败"}],
+                        "recommendations": []
+                    }
+                
+            except Exception as e:
+                logger.error(f"AI 分析失败: {e}")
+                # 降级：基于规则的简单分析
+                analysis_result = {
+                    "reasons": [
+                        {"type": "估算偏差", "impact": "高" if avg_delay > 14 else "中", "detail": f"平均延期{avg_delay:.0f}天，可能存在估算偏差"}
+                    ],
+                    "recommendations": [
+                        {"action": "重新评估剩余任务工期", "responsible": "项目经理", "priority": "高"},
+                        {"action": "增加资源投入或调整项目计划", "responsible": "项目负责人", "priority": "高"}
+                    ]
+                }
+            
+            return {
+                "success": True,
+                "data": {
+                    "project_id": project_id,
+                    "project_name": project[1],
+                    "leader": project[2],
+                    "has_defects": True,
+                    "delayed_tasks": delayed_tasks,
+                    "statistics": {
+                        "total_delayed": total_delayed,
+                        "avg_delay_days": round(avg_delay, 1),
+                        "max_delay_days": max_delay,
+                        "assignees": assignees
+                    },
+                    "analysis": analysis_result
+                }
+            }
+            
+    except Exception as e:
+        logger.exception(f"根因分析失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.post("/api/agent/quality/improvement")
+async def create_improvement_action(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    创建改进措施
+    """
+    from sqlalchemy import text
+    try:
+        project_id = request.get("project_id")
+        action_type = request.get("action_type", "纠正")
+        description = request.get("description")
+        responsible = request.get("responsible")
+        target_date = request.get("target_date")
+        
+        if not project_id or not description:
+            return {"success": False, "error": "缺少必填字段"}
+        
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                INSERT INTO improvement_actions 
+                (project_id, action_type, description, responsible, target_date, created_at)
+                VALUES (:pid, :type, :desc, :resp, :target, NOW())
+                RETURNING id
+            """), {
+                "pid": project_id,
+                "type": action_type,
+                "desc": description,
+                "resp": responsible,
+                "target": target_date
+            })
+            conn.commit()
+            
+            action_id = result.fetchone()[0]
+            
+            return {
+                "success": True,
+                "data": {"id": action_id, "message": "改进措施已创建"}
+            }
+            
+    except Exception as e:
+        logger.exception(f"创建改进措施失败: {e}")
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/api/agent/quality/improvements/{project_id}")
+async def get_project_improvements(
+    project_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    获取项目改进措施列表
+    """
+    from sqlalchemy import text
+    try:
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT id, action_type, description, responsible, 
+                       target_date, status, effect_measure, 
+                       created_at, completed_at
+                FROM improvement_actions
+                WHERE project_id = :pid
+                ORDER BY created_at DESC
+            """), {"pid": project_id})
+            
+            improvements = []
+            for row in result:
+                improvements.append({
+                    "id": row[0],
+                    "action_type": row[1],
+                    "description": row[2],
+                    "responsible": row[3],
+                    "target_date": str(row[4]) if row[4] else None,
+                    "status": row[5],
+                    "effect_measure": float(row[6]) if row[6] else None,
+                    "created_at": str(row[7]) if row[7] else None,
+                    "completed_at": str(row[8]) if row[8] else None
+                })
+            
+            return {"success": True, "data": improvements}
+            
+    except Exception as e:
+        logger.exception(f"获取改进措施失败: {e}")
+        return {"success": False, "error": str(e)}
+
