@@ -1214,15 +1214,15 @@ async def smart_parse_daily(
         }
 
     except HTTPException:
-            raise  # 重新抛出已处理的HTTP异常
-        except httpx.ReadTimeout:
-            logger.error("AI解析超时")
-            raise HTTPException(status_code=504, detail="AI解析超时，请稍后再试")
-        except Exception as e:
-            logger.error(f"解析失败: {e}")
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+        raise  # 重新抛出已处理的HTTP异常
+    except httpx.ReadTimeout:
+        logger.error("AI解析超时")
+        raise HTTPException(status_code=504, detail="AI解析超时，请稍后再试")
+    except Exception as e:
+        logger.error(f"解析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
 
 
 class CreateReportRequest(BaseModel):
