@@ -40,11 +40,11 @@ def get_logger(name: str) -> logging.Logger:
     console_handler.setFormatter(logging.Formatter(LOG_FORMAT, DATE_FORMAT))
     logger.addHandler(console_handler)
     
-    # 文件处理器（10MB轮转，保留5个备份）
+    # 文件处理器（50MB轮转，保留10个备份）
     file_handler = RotatingFileHandler(
         LOG_DIR / "app.log",
-        maxBytes=10 * 1024 * 1024,
-        backupCount=5,
+        maxBytes=50 * 1024 * 1024,
+        backupCount=10,
         encoding="utf-8"
     )
     file_handler.setLevel(logging.DEBUG)

@@ -54,13 +54,19 @@ export default function Layout({ children }: LayoutProps) {
   }
 
   // 导航项配置
-  const navItems = [
-    { path: '/', label: '个人' },
-    { path: '/daily', label: '日报' },
-    { path: '/projects', label: '项目' },
-    { path: '/chat', label: '问答' },
-    { path: '/dashboard', label: '看板' },
+  const allNavItems = [
+    { path: '/', label: '个人', roles: [11, 13, 14, 15, 16] }, // 看板角色(role_id=17)不显示
+    { path: '/daily', label: '日报', roles: [11, 13, 14, 15, 16] },
+    { path: '/projects', label: '项目', roles: [11, 13, 14, 15, 16] },
+    { path: '/chat', label: '问答', roles: [11, 13, 14, 15, 16] },
+    { path: '/dashboard', label: '看板', roles: [11, 13, 14, 15, 16, 17] }, // 所有角色都能看
   ]
+
+  // 根据角色过滤菜单
+  const navItems = allNavItems.filter(item => {
+    const userRoleId = user?.role_id || 13
+    return item.roles.includes(userRoleId)
+  })
 
   // 判断当前路径
   const isActive = (path: string) => {

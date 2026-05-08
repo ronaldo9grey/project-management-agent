@@ -4,8 +4,12 @@
 import os
 import json
 import re
+import asyncio
 from datetime import date, datetime
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any, Callable
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
+
 try:
     from .database import get_engine, text
     from .logger import ai_logger
@@ -16,8 +20,45 @@ except ImportError:
 
 import httpx
 
+# AI 调用专用线程池（最多5个并发AI请求）
+AI_EXECUTOR = ThreadPoolExecutor(max_workers=5, thread_name_prefix="ai_worker")
+
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+
+
+def run_sync_ai_in_thread(func: Callable) -> Callable:
+    """
+    装饰器：将同步AI调用函数包装为异步函数，在线程池中执行。
+    
+    用法：
+        @run_sync_ai_in_thread
+        def my_ai_call(text: str) -> Dict:
+            # 同步AI调用
+            return result
+        
+        # 调用时使用 await
+        result = await my_ai_call(text)
+    """
+    @wraps(func)
+    async def wrapper(*args, **kwargs):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(AI_EXECUTOR, func, *args, **kwargs)
+    return wrapper
+
+
+def run_in_thread(sync_func: Callable, *args, **kwargs) -> Any:
+    """
+    通用函数：在线程池中执行同步函数。
+    
+    用法：
+        result = await run_in_thread(my_sync_ai_call, arg1, arg2, kwarg1=value)
+    """
+    loop = asyncio.get_event_loop()
+    # 使用 lambda 传递 kwargs
+    if kwargs:
+        return loop.run_in_executor(AI_EXECUTOR, lambda: sync_func(*args, **kwargs))
+    return loop.run_in_executor(AI_EXECUTOR, sync_func, *args)
 
 
 def get_db_engine():
@@ -85,16 +126,9 @@ def get_latest_version_tasks(project_id: int) -> List[Dict]:
         return tasks
 
 
-async def match_task_by_content_ai(work_content: str, project_id: int, project_name: str = None) -> Optional[Dict[str, str]]:
+def _match_task_by_content_ai_sync(work_content: str, project_id: int, project_name: str = None) -> Optional[Dict[str, str]]:
     """
-    使用 AI 推理分析匹配任务
-    
-    参数：
-    - work_content: 日报工作内容
-    - project_id: 项目ID
-    - project_name: 项目名称（用于上下文）
-    
-    返回：匹配的任务信息 {"task_id": "xxx", "task_name": "xxx"}，未匹配返回 None
+    同步版：使用 AI 推理分析匹配任务（在线程池中执行）
     """
     tasks = get_latest_version_tasks(project_id)
     if not tasks:
@@ -128,12 +162,12 @@ async def match_task_by_content_ai(work_content: str, project_id: int, project_n
 不要返回任何解释，只返回 JSON。"""
 
     try:
-        # 直接硬编码 URL，避免环境变量问题
+        # 使用同步 httpx 客户端（线程安全）
         url = "https://api.deepseek.com/v1/chat/completions"
-        ai_logger.debug(f"调用 DeepSeek API: {url}")
+        ai_logger.debug(f"调用 DeepSeek API (线程池): {url}")
         
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.post(
+        with httpx.Client(timeout=15.0) as client:
+            response = client.post(
                 url,
                 headers={
                     "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -182,6 +216,158 @@ async def match_task_by_content_ai(work_content: str, project_id: int, project_n
         import traceback
         traceback.print_exc()
         return None
+
+
+async def match_task_by_content_ai(work_content: str, project_id: int, project_name: str = None) -> Optional[Dict[str, str]]:
+    """异步接口：在线程池中执行AI任务匹配"""
+    return await run_in_thread(_match_task_by_content_ai_sync, work_content, project_id, project_name)
+
+
+def _batch_match_tasks_ai_sync(
+    work_items: List[Dict[str, Any]],
+    project_id: int,
+    project_name: str = None
+) -> Dict[int, Optional[Dict[str, str]]]:
+    """
+    同步版：批量匹配任务（在线程池中执行）
+    """
+    if not work_items:
+        return {}
+    
+    tasks = get_latest_version_tasks(project_id)
+    if not tasks:
+        return {item["index"]: None for item in work_items}
+    
+    # 构建任务列表
+    task_list = "\n".join([
+        f"- {t['task_id']}: {t['task_name']} (状态: {t['status']}, 进度: {t['progress']}%)"
+        for t in tasks
+    ])
+    
+    # 构建工作事项列表
+    work_list = "\n".join([
+        f"[{item['index']}] {item['content']}"
+        for item in work_items
+    ])
+    
+    # 构建提示词
+    prompt = f"""你是一个项目管理助手，需要批量匹配日报工作内容到项目任务。
+
+项目：{project_name or f'项目{project_id}'}
+
+项目任务列表：
+{task_list}
+
+日报工作事项：
+{work_list}
+
+请为每条工作事项匹配任务。要求：
+1. 理解工作内容的语义，考虑任务上下文
+2. 如果明显属于某个任务，返回任务ID和名称
+3. 如果无法确定，返回 null
+
+只返回 JSON 数组格式：
+[
+  {{"index": 0, "task_id": "P35V2T2", "task_name": "需求调研"}},
+  {{"index": 1, "task_id": null}},
+  {{"index": 2, "task_id": "P35V2T6", "task_name": "前端开发"}}
+]
+
+不要返回任何解释，只返回 JSON 数组。"""
+
+    try:
+        url = "https://api.deepseek.com/v1/chat/completions"
+        ai_logger.debug(f"批量匹配调用 DeepSeek API (线程池): {len(work_items)} 条工作事项")
+        
+        with httpx.Client(timeout=20.0) as client:
+            response = client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": "你是一个精确的任务匹配助手，只返回 JSON 数组格式结果。"},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 500
+                }
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+                
+                # 解析 JSON 数组
+                json_match = re.search(r'\[[\s\S]*\]', content)
+                if json_match:
+                    data_list = json.loads(json_match.group())
+                    
+                    # 验证并构建结果
+                    task_dict = {t["task_id"]: t["task_name"] for t in tasks}
+                    results = {}
+                    
+                    for item in data_list:
+                        index = item.get("index")
+                        task_id = item.get("task_id")
+                        task_name = item.get("task_name")
+                        
+                        if task_id and task_id in task_dict:
+                            if not task_name:
+                                task_name = task_dict[task_id]
+                            results[index] = {"task_id": task_id, "task_name": task_name}
+                            ai_logger.info(f"批量匹配成功: [{index}] '{work_items[index]['content'][:30]}' -> {task_id}")
+                        else:
+                            results[index] = None
+                    
+                    # 补充缺失的索引
+                    for item in work_items:
+                        if item["index"] not in results:
+                            results[item["index"]] = None
+                    
+                    return results
+            
+            ai_logger.error(f"批量匹配失败: {response.status_code}")
+            return {item["index"]: None for item in work_items}
+            
+    except Exception as e:
+        ai_logger.exception(f"批量任务匹配异常: {e}")
+        return {item["index"]: None for item in work_items}
+
+
+async def batch_match_tasks_ai(
+    work_items: List[Dict[str, Any]],
+    project_id: int,
+    project_name: str = None
+) -> Dict[int, Optional[Dict[str, str]]]:
+    """异步接口：在线程池中执行批量AI任务匹配"""
+    return await run_in_thread(_batch_match_tasks_ai_sync, work_items, project_id, project_name)
+
+
+# 缓存：项目任务列表（5分钟过期）
+_task_cache: Dict[int, Tuple[List[Dict], float]] = {}
+
+def get_latest_version_tasks_cached(project_id: int, ttl_seconds: int = 300) -> List[Dict]:
+    """
+    获取项目任务列表（带缓存）
+    
+    默认缓存 5 分钟，减少数据库查询
+    """
+    import time
+    current_time = time.time()
+    
+    if project_id in _task_cache:
+        tasks, expire_time = _task_cache[project_id]
+        if current_time < expire_time:
+            return tasks
+    
+    # 缓存过期或不存在，重新获取
+    tasks = get_latest_version_tasks(project_id)
+    _task_cache[project_id] = (tasks, current_time + ttl_seconds)
+    return tasks
 
 
 def match_task_by_content(work_content: str, project_id: int) -> Optional[str]:
@@ -515,3 +701,444 @@ def update_task_progress_from_daily(work_items: List[Dict]) -> List[str]:
             continue
     
     return updated_tasks
+
+
+# =====================================================================
+# 一次 AI 调用完成日报解析（项目+任务+时间）
+# =====================================================================
+
+OTHER_WORK_PROJECT_ID = 36  # "其他工作"项目ID
+
+
+def get_all_projects_with_tasks() -> List[Dict]:
+    """
+    获取所有项目及其最新版本任务列表
+    
+    返回：[{"id": 17, "name": "xxx", "tasks": [{"id": "xxx", "name": "xxx"}, ...]}, ...]
+    """
+    engine = get_db_engine()
+    
+    with engine.connect() as conn:
+        # 获取所有未删除的项目
+        projects_result = conn.execute(text("""
+            SELECT id, name, leader
+            FROM projects
+            WHERE is_deleted = false
+            ORDER BY id
+        """))
+        
+        projects = []
+        for row in projects_result:
+            project_id = row[0]
+            project_name = row[1]
+            
+            # 获取该项目最新版本的任务
+            tasks = get_latest_version_tasks(project_id)
+            
+            projects.append({
+                "id": project_id,
+                "name": project_name,
+                "tasks": tasks
+            })
+        
+        return projects
+
+
+async def parse_daily_all_in_one(
+    user_input: str,
+    report_date: str = None
+) -> Dict:
+    """
+    一次 AI 调用完成日报解析：项目匹配 + 任务匹配 + 时间计算
+    
+    参数：
+    - user_input: 用户输入的日报文本
+    - report_date: 日报日期（可选）
+    
+    返回：标准化的 JSON 结构
+    """
+    # 获取所有项目和任务
+    projects = get_all_projects_with_tasks()
+    
+    # 构建项目任务列表文本
+    project_list_text = []
+    for p in projects:
+        task_lines = []
+        for t in p["tasks"]:
+            task_lines.append(f"    - {t['task_id']}: {t['task_name']}")
+        
+        project_list_text.append(f"""【项目{p['id']}】{p['name']}
+{chr(10).join(task_lines) if task_lines else '    (无任务)'}""")
+    
+    projects_context = "\n\n".join(project_list_text)
+    
+    # 构建系统提示词
+    system_prompt = """你是一个日报解析助手，需要从用户输入中提取工作事项，并匹配项目、任务、计算工时。
+
+## ⚠️ 核心规则：标准工作日 = 8小时
+- 上午：08:15 - 12:00（3.75小时）
+- 下午：13:45 - 18:00（4.25小时）
+- 午休：12:00 - 13:45（不计入工时）
+- **一天工作时间上限 = 8小时**
+- 用户写 "8:15-18:30" 这种超出工作时间段的，按 8 小时计算
+- 只有明确标注"加班"的才计算加班工时
+
+## 时间计算规则
+1. 跨午休时段，需扣除1.75小时（12:00-13:45）
+2. 计算结果上限为 8 小时
+3. 只有明确提到"额外X小时"、"加班X小时"、"晚上X小时"的，才计算加班
+4. 只有"上午"或"下午"而无具体时间的，默认4小时
+5. 无时间信息的，默认4小时
+
+## ⚠️ 重要：同一时段多件事的处理方式
+用户可能在同一时间段内完成多件事，常见格式：
+- "8:15-18:30 1.xxx, 2.xxx, 3.xxx"
+- "下午协调完成（1）xxx（2）xxx"
+
+**处理规则**：
+- **⚠️ 每个事项的 hours 必须设为 0！**
+- 只需记录时间段（start/end）即可
+- 用户的意思是："在这个时间段内完成了这些工作"
+- 系统会自动计算总工时并合并展示
+- 例：8:15-18:30干了7件事 → 每个事项 hours=0，时间 8:15-18:30
+
+## 匹配规则
+1. 根据工作内容语义匹配项目（理解上下文）
+2. 在匹配的项目下匹配任务
+3. 如果明确不属于任何项目，设置为 null（系统会归类为"其他工作"）
+4. 如果属于某项目但无法匹配具体任务，task 设为 null
+5. 根据时间表述计算工时
+
+## 输出格式
+严格返回 JSON，不要有任何额外文字"""
+
+    # 构建用户提示词
+    user_prompt = f"""## 项目任务列表
+
+{projects_context}
+
+## 用户日报内容
+
+{user_input}
+
+请解析并返回 JSON 格式：
+{{
+  "success": true,
+  "entries": [
+    {{
+      "index": 0,
+      "content": "工作内容描述",
+      "project": {{"id": 17, "name": "项目名称"}} 或 null,
+      "task": {{"id": "任务ID", "name": "任务名称"}} 或 null,
+      "time": {{
+        "start": "08:30",
+        "end": "12:00",
+        "hours": 3.5,
+        "is_overtime": false
+      }},
+      "confidence": 0.95
+    }}
+  ],
+  "warnings": []
+}}
+
+注意：
+- 如果匹配不到项目，project 设为 null
+- 如果匹配到项目但匹配不到任务，task 设为 null
+- confidence 表示匹配置信度（0-1）"""
+
+    try:
+        url = "https://api.deepseek.com/v1/chat/completions"
+        ai_logger.info(f"一次性解析日报，项目数: {len(projects)}, 输入长度: {len(user_input)}")
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                url,
+                headers={
+                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 2000
+                }
+            )
+            
+            if response.status_code != 200:
+                ai_logger.error(f"AI调用失败: {response.status_code} - {response.text[:200]}")
+                return {
+                    "success": False,
+                    "entries": [],
+                    "warnings": [f"AI解析失败: {response.status_code}"]
+                }
+            
+            result = response.json()
+            content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
+            
+            # 解析 JSON
+            json_match = re.search(r'\{[\s\S]*\}', content)
+            if not json_match:
+                ai_logger.error(f"AI返回格式错误: {content[:200]}")
+                return {
+                    "success": False,
+                    "entries": [],
+                    "warnings": ["AI返回格式错误"]
+                }
+            
+            ai_result = json.loads(json_match.group())
+            
+            # 验证并修复结果
+            validated_result = validate_ai_result(ai_result, projects)
+            
+            ai_logger.info(f"AI解析成功: {len(validated_result.get('entries', []))} 条工作事项")
+            
+            return validated_result
+            
+    except Exception as e:
+        ai_logger.exception(f"日报解析异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "entries": [],
+            "warnings": [f"解析异常: {str(e)}"]
+        }
+
+
+def parse_daily_all_in_one_sync(user_input: str, report_date: str = None) -> Dict:
+    """
+    parse_daily_all_in_one 的同步版本，运行在线程池中。
+    每个线程创建独立的事件循环，避免与主事件循环冲突。
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        result = loop.run_until_complete(
+            parse_daily_all_in_one(user_input, report_date)
+        )
+        return result
+    finally:
+        loop.close()
+
+
+async def parse_daily_all_in_one_threaded(user_input: str, report_date: str = None) -> Dict:
+    """
+    在线程池中执行 AI 解析，不阻塞主事件循环。
+    
+    关键改进：
+    - AI 调用（6-30秒）在独立线程中执行
+    - 主事件循环释放，可处理其他请求（登录、心跳等）
+    - 最多5个并发 AI 请求
+    """
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        AI_EXECUTOR,
+        parse_daily_all_in_one_sync,
+        user_input,
+        report_date
+    )
+    return result
+
+
+def validate_ai_result(ai_result: Dict, projects: List[Dict]) -> Dict:
+    """
+    验证并修复 AI 返回结果
+    """
+    valid_project_ids = {p["id"] for p in projects}
+    project_tasks = {p["id"]: {t["task_id"] for t in p["tasks"]} for p in projects}
+    project_names = {p["id"]: p["name"] for p in projects}
+    
+    entries = ai_result.get("entries", [])
+    warnings = ai_result.get("warnings", [])
+    
+    # ⚠️ 重要：先校正工时精度（处理同一时间段多件事的分摊问题）
+    # 这样可以避免 AI 返回负工时时被单项校验覆盖
+    entries = correct_hours_precision(entries)
+    
+    validated_entries = []
+    
+    for entry in entries:
+        idx = entry.get("index", len(validated_entries))
+        content = entry.get("content", "")
+        project = entry.get("project")
+        task = entry.get("task")
+        time_info = entry.get("time")
+        confidence = entry.get("confidence", 0.8)
+        
+        # 校验项目
+        if project:
+            pid = project.get("id")
+            if pid not in valid_project_ids:
+                warnings.append(f"第{idx+1}条: 项目ID {pid} 不存在")
+                project = None
+            else:
+                # 修正项目名称
+                project["name"] = project_names.get(pid, project.get("name"))
+        
+        # 校验任务
+        if task and project:
+            tid = task.get("id")
+            pid = project.get("id")
+            if tid not in project_tasks.get(pid, set()):
+                warnings.append(f"第{idx+1}条: 任务 {tid} 不属于项目 {project.get('name')}")
+                task = None
+        
+        # 校验工时（此时已校正过，只检查单项合理性）
+        if time_info:
+            hours = time_info.get("hours", 4.0)
+            # ⚠️ 如果校正后仍有负值或超出范围，设为合理的均分值
+            if hours < 0 or hours > 12:
+                warnings.append(f"第{idx+1}条: 工时 {hours} 不合理，已设为默认值")
+                # 使用默认均分值
+                time_info["hours"] = round(8.0 / max(len(entries), 1), 2)
+        else:
+            # 默认时间
+            time_info = {
+                "start": None,
+                "end": None,
+                "hours": round(8.0 / max(len(entries), 1), 2),
+                "is_overtime": False
+            }
+        
+        # 低置信度提示
+        if confidence < 0.6:
+            warnings.append(f"第{idx+1}条: 匹配置信度较低 ({confidence:.0%})")
+        
+        validated_entries.append({
+            "index": idx,
+            "content": content,
+            "project": project,
+            "task": task,
+            "time": time_info,
+            "confidence": confidence
+        })
+    
+    # 为未匹配项目的条目设置虚拟"其他工作"（project_id = null）
+    for entry in validated_entries:
+        if entry["project"] is None:
+            entry["project"] = {"id": None, "name": "其他工作"}
+    
+    return {
+        "success": ai_result.get("success", True),
+        "entries": validated_entries,
+        "warnings": warnings
+    }
+
+
+def correct_hours_precision(entries: List[Dict]) -> List[Dict]:
+    """
+    校正工时精度：同一时间段内的多项工作，确保工时总和正确
+    
+    例：上午8:15-12:00（3.75h）有2件事
+    - AI返回每件1.87h，总和3.74h（误差0.01h）
+    - 修正为1.87h + 1.88h = 3.75h
+    """
+    from collections import defaultdict
+    import math
+    
+    # 按时间段分组
+    time_groups = defaultdict(list)
+    for entry in entries:
+        time_info = entry.get("time", {})
+        start = time_info.get("start")
+        end = time_info.get("end")
+        if start and end:
+            key = (start, end)
+            time_groups[key].append(entry)
+    
+    # 计算每个时间段的标准工时
+    def calc_standard_hours(start: str, end: str) -> float:
+        """
+        计算时间段对应的标准工时
+        
+        规则：
+        - 标准工作日：上午8:15-12:00（3.75h）+ 下午13:45-18:00（4.25h）= 8小时
+        - 午休时间（12:00-13:45）不计入工时
+        - **标准工时上限为 8 小时**，超出部分不计入（除非明确标记加班）
+        - **⚠️ 默认开始时间：08:15**
+          - 如果用户填写的开始时间早于08:15（如8:45写错成其他），默认从08:15开始
+        """
+        try:
+            s_h, s_m = int(start[:2]), int(start[3:5])
+            e_h, e_m = int(end[:2]), int(end[3:5])
+            
+            start_minutes = s_h * 60 + s_m
+            end_minutes = e_h * 60 + e_m
+            
+            # ⚠️ 默认开始时间：08:15（495分钟）
+            # 如果开始时间早于08:15，设为08:15
+            standard_start = 8 * 60 + 15  # 495
+            if start_minutes < standard_start:
+                start_minutes = standard_start
+            
+            # 午休时间：12:00 - 13:45（105分钟）
+            lunch_start = 12 * 60  # 720
+            lunch_end = 13 * 60 + 45  # 825
+            
+            total_minutes = end_minutes - start_minutes
+            
+            # 如果跨越午休，扣除午休时间
+            if start_minutes < lunch_start and end_minutes > lunch_end:
+                total_minutes -= 105  # 扣除1小时45分
+            elif start_minutes < lunch_start and end_minutes > lunch_start and end_minutes <= lunch_end:
+                # 结束在午休期间
+                total_minutes = lunch_start - start_minutes
+            elif start_minutes >= lunch_start and start_minutes < lunch_end and end_minutes > lunch_end:
+                # 开始于午休期间
+                total_minutes = end_minutes - lunch_end
+            
+            hours = total_minutes / 60
+            
+            # ⚠️ 标准工作日上限为 8 小时
+            # 超出部分不计入（除非明确标记为加班）
+            hours = min(hours, 8.0)
+            
+            return round(hours, 2)
+        except:
+            return 4.0  # 默认
+    
+    # 处理同一时间段内的多件事
+    for key, group in time_groups.items():
+        if len(group) <= 1:
+            continue
+        
+        start, end = key
+        standard_hours = calc_standard_hours(start, end)
+        
+        # 检查是否有负值或零值
+        has_negative = any(e["time"]["hours"] < 0 for e in group)
+        has_zero = all(e["time"]["hours"] == 0 for e in group)
+        
+        if has_negative or has_zero:
+            # 出现负值或全部为零时修正，均分为合理值
+            if has_zero:
+                ai_logger.info(f"工时修正: {start}-{end} 共{len(group)}项，hours=0，调整为均分 {standard_hours}h")
+            else:
+                ai_logger.warning(f"工时异常修正: {start}-{end} 共{len(group)}项，存在负值，调整为均分")
+            
+            # ⚠️ 精度修正：最后一条用减法，确保总和精确
+            base_hours = standard_hours / len(group)
+            allocated = 0.0
+            for i, entry in enumerate(group):
+                if i < len(group) - 1:
+                    # 前面的条目用四舍五入
+                    hours = round(base_hours, 2)
+                    entry["time"]["hours"] = hours
+                    allocated += hours
+                else:
+                    # 最后一条用减法，确保总和精确
+                    entry["time"]["hours"] = round(standard_hours - allocated, 2)
+        else:
+            # 无负值且不全为零时，保留AI分配的工时，但设置一个标记
+            # 让前端知道这些事项共享同一时间段
+            for entry in group:
+                if "time" not in entry:
+                    entry["time"] = {}
+                entry["time"]["shared_period"] = f"{start}-{end}"
+                entry["time"]["period_total_hours"] = standard_hours
+    
+    return entries

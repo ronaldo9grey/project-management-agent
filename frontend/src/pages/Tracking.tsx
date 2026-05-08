@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useAppStore } from '../store'
 import MobileNav from '../components/MobileNav'
+import { redirectToLogin } from '../utils/auth'
+import { apiClient } from '../api'
+import { showToast } from '../components/Toast'
 
 // 视图类型
 type ViewType = 'execution' | 'health' | 'trace'
@@ -198,7 +202,7 @@ interface TraceData {
 }
 
 export default function TrackingPage() {
-  const { token } = useAppStore()
+  const { user, logout } = useAppStore()
   const [activeView, setActiveView] = useState<ViewType>('execution')
   const [executionData, setExecutionData] = useState<ExecutionData | null>(null)
   const [healthData, setHealthData] = useState<HealthData | null>(null)
@@ -206,31 +210,58 @@ export default function TrackingPage() {
   const [loading, setLoading] = useState(false)
   const [tipsModal, setTipsModal] = useState<{title: string; content: string} | null>(null)
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  
+  // 检测是否手机端
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768)
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+  
+  // 点击外部关闭用户菜单
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (showUserMenu && !target.closest('.user-menu-wrapper')) {
+        setShowUserMenu(false)
+      }
+    }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [showUserMenu])
 
   useEffect(() => {
     loadData()
   }, [activeView])
+  
+  const handleLogout = () => {
+    logout()
+    redirectToLogin()
+  }
 
   const loadData = async () => {
     setLoading(true)
     try {
-      const headers = { Authorization: `Bearer ${token}` }
-      
       if (activeView === 'execution') {
-        const res = await fetch('/api/agent/tracking/execution', { headers })
-        const json = await res.json()
-        setExecutionData(json.data)
+        const res = await apiClient.get('/api/agent/tracking/execution')
+        setExecutionData(res.data.data)
       } else if (activeView === 'health') {
-        const res = await fetch('/api/agent/tracking/health', { headers })
-        const json = await res.json()
-        setHealthData(json.data)
+        const res = await apiClient.get('/api/agent/tracking/health')
+        setHealthData(res.data.data)
       } else {
-        const res = await fetch('/api/agent/tracking/trace', { headers })
-        const json = await res.json()
-        setTraceData(json.data)
+        const res = await apiClient.get('/api/agent/tracking/trace')
+        setTraceData(res.data.data)
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('加载失败:', err)
+      if (err.message?.includes('Failed to fetch')) {
+        showToast('网络连接不稳定，正在重试...', 'warning')
+      } else {
+        showToast('加载数据失败', 'error')
+      }
     } finally {
       setLoading(false)
     }
@@ -323,16 +354,138 @@ export default function TrackingPage() {
         />
       )}
 
-      {/* 顶部标题 */}
+      {/* 顶部导航 - PC端 */}
+      <header className="header" style={{ display: isMobile ? 'none' : 'block' }}>
+        <div className="header-content">
+          <div className="header-left">
+            <Link to="/" className="header-logo">
+              <span className="text-xl">⚙️</span>
+              <span className="header-title">项目管家</span>
+            </Link>
+            <nav className="header-nav">
+              <Link to="/" className="nav-link">个人</Link>
+              <Link to="/daily" className="nav-link">日报</Link>
+              <Link to="/projects" className="nav-link">项目</Link>
+              <Link to="/tracking" className="nav-link active">追踪</Link>
+              <Link to="/quality" className="nav-link">质量</Link>
+              <Link to="/dashboard" className="nav-link">看板</Link>
+            </nav>
+          </div>
+          <div className="header-right">
+            <div className="user-menu-wrapper" style={{ position: 'relative' }}>
+              <div 
+                className="user-info"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+              >
+                <div className="user-avatar">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
+                <span className="user-name">{user?.name || '用户'}</span>
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+              {showUserMenu && (
+                <div className="user-dropdown">
+                  <div className="user-dropdown-header">
+                    <div className="user-avatar-lg">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
+                    <div>
+                      <div style={{ fontWeight: 500, color: '#1f2937' }}>{user?.name || '用户'}</div>
+                      {user?.department && <div style={{ fontSize: 12, color: '#6b7280' }}>{user.department}</div>}
+                    </div>
+                  </div>
+                  <div className="user-dropdown-divider" />
+                  <button className="user-dropdown-item" onClick={handleLogout}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    退出登录
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* 顶部标题 - 移动端 */}
       <header style={{ 
+        display: isMobile ? 'flex' : 'none',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
-        padding: '14px 16px',
+        padding: '10px 16px',
         position: 'sticky',
         top: 0,
-        zIndex: 100
+        zIndex: 100,
+        justifyContent: 'space-between',
+        alignItems: 'center'
       }}>
         <h1 style={{ color: 'white', fontSize: 18, fontWeight: 600, margin: 0 }}>📍 项目追踪</h1>
+        
+        {/* 用户菜单 - 移动端 */}
+        <div className="user-menu-wrapper" style={{ position: 'relative' }}>
+          <div 
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              cursor: 'pointer',
+              color: 'white'
+            }}
+          >
+            <div style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              background: 'rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 600,
+              fontSize: 12
+            }}>
+              {user?.name?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <svg style={{ width: 16, height: 16 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+          
+          {showUserMenu && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              right: 0,
+              marginTop: 8,
+              background: 'white',
+              borderRadius: 12,
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+              minWidth: 160,
+              overflow: 'hidden'
+            }}>
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
+                <div style={{ fontWeight: 500, color: '#1f2937' }}>{user?.name || '用户'}</div>
+                {user?.department && <div style={{ fontSize: 12, color: '#6b7280' }}>{user.department}</div>}
+              </div>
+              <Link to="/plans" style={{ display: 'block', padding: '10px 16px', color: '#374151', textDecoration: 'none' }}>📋 我的计划</Link>
+              <button 
+                onClick={handleLogout}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '10px 16px',
+                  textAlign: 'left',
+                  border: 'none',
+                  background: 'none',
+                  color: '#dc2626',
+                  cursor: 'pointer'
+                }}
+              >
+                退出登录
+              </button>
+            </div>
+          )}
+        </div>
       </header>
 
       {/* 视图切换标签 */}
@@ -382,72 +535,131 @@ export default function TrackingPage() {
             {/* 执行视图 */}
             {activeView === 'execution' && executionData && (
               <div>
-                {/* 总任务数 */}
-                <div style={{
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                  borderRadius: 16,
-                  padding: 20,
-                  marginBottom: 16,
-                  color: 'white'
-                }}>
-                  <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>
-                    总任务数
-                  </div>
-                  <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 12 }}>
-                    {executionData.stats.total_tasks}
-                  </div>
+                {/* PC端：紧凑横向布局 */}
+                {!isMobile && (
                   <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(4, 1fr)',
-                    gap: 8
+                    display: 'flex',
+                    gap: 16,
+                    marginBottom: 16
                   }}>
-                    {[
-                      { label: '未开始', count: executionData.stats.status_pending, color: '#94a3b8' },
-                      { label: '进行中', count: executionData.stats.status_ongoing, color: '#3b82f6' },
-                      { label: '延期', count: executionData.stats.status_delayed, color: '#ef4444' },
-                      { label: '已完成', count: executionData.stats.status_completed, color: '#22c55e' }
-                    ].map(item => (
-                      <div key={item.label} style={{ textAlign: 'center' }}>
-                        <div style={{ fontSize: 18, fontWeight: 600, color: item.color }}>
-                          {item.count}
-                        </div>
-                        <div style={{ fontSize: 11, opacity: 0.8 }}>
-                          {item.label}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 待办统计卡片 */}
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(4, 1fr)',
-                  gap: 8,
-                  marginBottom: 16
-                }}>
-                  {[
-                    { label: '今日', count: executionData.stats.today_count, color: '#dc2626' },
-                    { label: '本周', count: executionData.stats.week_count, color: '#f59e0b' },
-                    { label: '本月', count: executionData.stats.month_count, color: '#3b82f6' },
-                    { label: '完成', count: executionData.stats.completed_week, color: '#22c55e' }
-                  ].map(stat => (
-                    <div key={stat.label} style={{
-                      background: 'white',
-                      borderRadius: 12,
-                      padding: '12px 8px',
-                      textAlign: 'center',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                    {/* 总任务数卡片 */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                      borderRadius: 16,
+                      padding: '20px 28px',
+                      color: 'white',
+                      minWidth: 160,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center'
                     }}>
-                      <div style={{ fontSize: 24, fontWeight: 700, color: stat.color }}>
-                        {stat.count}
+                      <div style={{ fontSize: 13, opacity: 0.85 }}>总任务数</div>
+                      <div style={{ fontSize: 48, fontWeight: 700 }}>{executionData.stats.total_tasks}</div>
+                    </div>
+                    
+                    {/* 统计网格 */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {/* 状态分布 */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: 10,
+                        background: 'white',
+                        borderRadius: 12,
+                        padding: '14px 16px',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                      }}>
+                        {[
+                          { label: '未开始', count: executionData.stats.status_pending, color: '#94a3b8' },
+                          { label: '进行中', count: executionData.stats.status_ongoing, color: '#3b82f6' },
+                          { label: '延期', count: executionData.stats.status_delayed, color: '#ef4444' },
+                          { label: '已完成', count: executionData.stats.status_completed, color: '#22c55e' }
+                        ].map(item => (
+                          <div key={item.label} style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>{item.count}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{item.label}</div>
+                          </div>
+                        ))}
                       </div>
-                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                        {stat.label}
+                      
+                      {/* 待办统计 */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: 10
+                      }}>
+                        {[
+                          { label: '今日截止', count: executionData.stats.today_count, color: '#dc2626' },
+                          { label: '本周截止', count: executionData.stats.week_count, color: '#f59e0b' },
+                          { label: '本月截止', count: executionData.stats.month_count, color: '#3b82f6' },
+                          { label: '本周完成', count: executionData.stats.completed_week, color: '#22c55e' }
+                        ].map(item => (
+                          <div key={item.label} style={{
+                            background: 'white',
+                            borderRadius: 12,
+                            padding: '12px 8px',
+                            textAlign: 'center',
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
+                          }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: item.color }}>{item.count}</div>
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{item.label}</div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+                
+                {/* 手机端：垂直布局 */}
+                {isMobile && (
+                  <>
+                    {/* 总任务数 */}
+                    <div style={{
+                      background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                      borderRadius: 16,
+                      padding: '20px 24px',
+                      marginBottom: 12,
+                      color: 'white'
+                    }}>
+                      <div style={{ fontSize: 14, opacity: 0.9, marginBottom: 8 }}>总任务数</div>
+                      <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 12 }}>{executionData.stats.total_tasks}</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                        {[
+                          { label: '未开始', count: executionData.stats.status_pending, color: '#94a3b8' },
+                          { label: '进行中', count: executionData.stats.status_ongoing, color: '#3b82f6' },
+                          { label: '延期', count: executionData.stats.status_delayed, color: '#ef4444' },
+                          { label: '已完成', count: executionData.stats.status_completed, color: '#22c55e' }
+                        ].map(item => (
+                          <div key={item.label} style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: 18, fontWeight: 600, color: item.color }}>{item.count}</div>
+                            <div style={{ fontSize: 11, opacity: 0.8 }}>{item.label}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    
+                    {/* 待办统计 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+                      {[
+                        { label: '今日', count: executionData.stats.today_count, color: '#dc2626' },
+                        { label: '本周', count: executionData.stats.week_count, color: '#f59e0b' },
+                        { label: '本月', count: executionData.stats.month_count, color: '#3b82f6' },
+                        { label: '完成', count: executionData.stats.completed_week, color: '#22c55e' }
+                      ].map(item => (
+                        <div key={item.label} style={{
+                          background: 'white',
+                          borderRadius: 12,
+                          padding: '12px 8px',
+                          textAlign: 'center',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                        }}>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: item.color }}>{item.count}</div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{item.label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
 
                 {/* 已过期任务 */}
                 {executionData.overdue_tasks && executionData.overdue_tasks.length > 0 && (
@@ -627,7 +839,7 @@ export default function TrackingPage() {
                 <div style={{
                   display: 'grid',
                   gridTemplateColumns: 'repeat(2, 1fr)',
-                  gap: 8,
+                  gap: 10,
                   marginBottom: 16
                 }}>
                   {[
@@ -743,7 +955,7 @@ export default function TrackingPage() {
                 <div style={{
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   borderRadius: 16,
-                  padding: 24,
+                  padding: '20px 24px',
                   marginBottom: 16,
                   color: 'white'
                 }}>

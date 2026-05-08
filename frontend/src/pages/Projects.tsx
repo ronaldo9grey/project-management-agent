@@ -11,6 +11,7 @@ interface Project {
   leader: string
   status: string
   progress: number
+  project_year?: number
 }
 
 export default function ProjectsPage() {
@@ -47,7 +48,14 @@ export default function ProjectsPage() {
     }
   }
 
-  const filteredProjects = projects.filter(p =>
+  // 按年度分组
+  const currentYear = new Date().getFullYear()
+  const currentYearProjects = projects.filter(p => 
+    (p.project_year === currentYear || !p.project_year) && 
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+  const historicalProjects = projects.filter(p => 
+    p.project_year && p.project_year < currentYear && 
     p.name.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
@@ -73,6 +81,40 @@ export default function ProjectsPage() {
     safeRedirect(`/agent/projects/${projectId}`)
   }
 
+  // 渲染项目卡片
+  const renderProjectCards = (projectList: Project[]) => (
+    projectList.map((project) => (
+      <div
+        key={project.id}
+        className="project-card"
+        onClick={() => goToDetail(project.id)}
+      >
+        <div className="project-card-header">
+          <h3 className="project-card-name">{project.name}</h3>
+          {getStatusTag(project.status)}
+        </div>
+        <div className="project-card-meta">
+          <span>👤 {project.leader || '未指定'}</span>
+        </div>
+        <div className="project-card-progress">
+          <div className="progress-bar">
+            <div
+              className="progress-bar-fill"
+              style={{ width: `${project.progress}%` }}
+            />
+          </div>
+          <span className="project-card-progress-text">{project.progress}%</span>
+        </div>
+        <div className="project-card-action">
+          <span>查看详情</span>
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    ))
+  )
+
   return (
     <div className="page-container">
       {/* 顶部导航 */}
@@ -87,7 +129,8 @@ export default function ProjectsPage() {
               <Link to="/" className="nav-link">个人</Link>
               <Link to="/daily" className="nav-link">日报</Link>
               <Link to="/projects" className="nav-link active">项目</Link>
-              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/tracking" className="nav-link">追踪</Link>
+              <Link to="/quality" className="nav-link">质量</Link>
               <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
@@ -143,52 +186,81 @@ export default function ProjectsPage() {
           />
         </div>
 
-        {/* 项目列表 */}
-        <div className="projects-grid">
-            {isLoading ? (
-              <div className="empty-state">
-                <span className="spinner"></span>
-                <p className="text-gray-500 mt-2">加载中...</p>
+        {isLoading ? (
+          <div className="empty-state">
+            <span className="spinner"></span>
+            <p className="text-gray-500 mt-2">加载中...</p>
+          </div>
+        ) : (
+          <>
+            {/* 本年度项目 */}
+            {currentYearProjects.length > 0 && (
+              <div style={{ marginBottom: '32px' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '16px',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+                  borderRadius: '12px',
+                  border: '1px solid #bfdbfe'
+                }}>
+                  <span style={{ fontSize: '20px' }}>🚀</span>
+                  <div>
+                    <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#1e40af', margin: 0 }}>
+                      {currentYear}年度项目
+                    </h2>
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
+                      {currentYearProjects.length} 个进行中的项目
+                    </p>
+                  </div>
+                </div>
+                <div className="projects-grid">
+                  {renderProjectCards(currentYearProjects)}
+                </div>
               </div>
-            ) : filteredProjects.length === 0 ? (
+            )}
+
+            {/* 历史项目 */}
+            {historicalProjects.length > 0 && (
+              <div>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  marginBottom: '16px',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%)',
+                  borderRadius: '12px',
+                  border: '1px solid #cbd5e1'
+                }}>
+                  <span style={{ fontSize: '20px' }}>📚</span>
+                  <div>
+                    <h2 style={{ fontSize: '18px', fontWeight: 600, color: '#475569', margin: 0 }}>
+                      历史项目
+                    </h2>
+                    <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
+                      {historicalProjects.length} 个已完成项目
+                    </p>
+                  </div>
+                </div>
+                <div className="projects-grid">
+                  {renderProjectCards(historicalProjects)}
+                </div>
+              </div>
+            )}
+
+            {/* 无项目 */}
+            {currentYearProjects.length === 0 && historicalProjects.length === 0 && (
               <div className="empty-state">
                 <div className="empty-icon">📁</div>
                 <p className="empty-title">暂无项目</p>
                 <p className="empty-desc">您还没有参与任何项目</p>
               </div>
-            ) : (
-              filteredProjects.map((project) => (
-                <div
-                  key={project.id}
-                  className="project-card"
-                  onClick={() => goToDetail(project.id)}
-                >
-                  <div className="project-card-header">
-                    <h3 className="project-card-name">{project.name}</h3>
-                    {getStatusTag(project.status)}
-                  </div>
-                  <div className="project-card-meta">
-                    <span>👤 {project.leader || '未指定'}</span>
-                  </div>
-                  <div className="project-card-progress">
-                    <div className="progress-bar">
-                      <div
-                        className="progress-bar-fill"
-                        style={{ width: `${project.progress}%` }}
-                      />
-                    </div>
-                    <span className="project-card-progress-text">{project.progress}%</span>
-                  </div>
-                  <div className="project-card-action">
-                    <span>查看详情</span>
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              ))
             )}
-        </div>
+          </>
+        )}
       </main>
 
       {/* 移动端底部导航 */}

@@ -315,16 +315,6 @@ body::before {
   font-size: 14px;
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(14, 165, 233, 0.3);
-  cursor: pointer;
-}
-
-/* 手机端头像触摸区域扩大 */
-@media (max-width: 768px) {
-  .user-avatar {
-    width: 40px;
-    height: 40px;
-    font-size: 15px;
-  }
 }
 
 .user-name {
@@ -2470,10 +2460,10 @@ select.input {
 /* 脉冲动画 */
 @keyframes pulse {
   0%, 100% {
-    opacity: 1;
+    transform: scale(1);
   }
   50% {
-    opacity: 0.7;
+    transform: scale(1.02);
   }
 }
 
@@ -3937,6 +3927,46 @@ select.input {
     padding: 12px 8px !important;
   }
 }
+
+/* ===== 个人首页响应式 ===== */
+
+/* 欢迎区域 */
+.home-welcome-section {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.home-welcome-info {
+  min-width: 0;
+}
+
+.home-welcome-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.home-welcome-date {
+  font-size: 14px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+.home-daily-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+}
+
+/* 骨架屏样式 */
 .skeleton {
   background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
   background-size: 200% 100%;

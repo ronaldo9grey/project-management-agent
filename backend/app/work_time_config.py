@@ -54,12 +54,18 @@ def calculate_work_hours(start_time: str, end_time: str) -> float:
     注意：
     - 标准工作时间内（08:15-18:00）扣除午休
     - 加班时间（18:00之后）不扣除午休
+    - ⚠️ 默认开始时间：08:15（如果开始时间早于08:15，按08:15计算）
     """
     from datetime import datetime, timedelta
     
     try:
         start = datetime.strptime(start_time, "%H:%M")
         end = datetime.strptime(end_time, "%H:%M")
+        
+        # ⚠️ 默认开始时间：08:15
+        standard_start = datetime.strptime("08:15", "%H:%M")
+        if start < standard_start:
+            start = standard_start
         
         # 计算总时长（分钟）
         total_minutes = (end - start).seconds // 60

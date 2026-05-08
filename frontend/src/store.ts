@@ -40,6 +40,18 @@ interface DailyEntry {
   matched_task_id?: string
   matched_task_name?: string
   match_confidence?: number
+  shared_period?: string  // 共享时间段
+  period_total_hours?: number  // 该时间段的总工时
+}
+
+interface DailyDraft {
+  inputText: string
+  entries: DailyEntry[]
+  selectedDate: string
+  warnings: { type: string; message: string }[]
+  matchedProjects: Array<{id: number; name: string; leader: string}>
+  hasParsed: boolean
+  updatedAt: string
 }
 
 interface AppState {
@@ -54,25 +66,32 @@ interface AppState {
   currentProject: Project | null
   setCurrentProject: (project: Project | null) => void
   
-  // 日报状态
+  // 日报状态（临时，不持久化）
   dailyEntries: DailyEntry[]
   setDailyEntries: (entries: DailyEntry[]) => void
   addDailyEntry: (entry: DailyEntry) => void
   removeDailyEntry: (index: number) => void
   clearDailyEntries: () => void
+  
+  // 日报草稿（持久化）
+  dailyDraft: DailyDraft | null
+  saveDailyDraft: (draft: DailyDraft) => void
+  loadDailyDraft: () => DailyDraft | null
+  clearDailyDraft: () => void
 }
 
 export const useAppStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       currentProject: null,
       dailyEntries: [],
+      dailyDraft: null,
       
       setUser: (user: User | null) => set({ user }),
       setToken: (token: string | null) => set({ token }),
-      logout: () => set({ user: null, token: null, currentProject: null, dailyEntries: [] }),
+      logout: () => set({ user: null, token: null, currentProject: null, dailyEntries: [], dailyDraft: null }),
       
       setCurrentProject: (project: Project | null) => set({ currentProject: project }),
       
@@ -84,13 +103,19 @@ export const useAppStore = create<AppState>()(
         dailyEntries: state.dailyEntries.filter((_: DailyEntry, i: number) => i !== index)
       })),
       clearDailyEntries: () => set({ dailyEntries: [] }),
+      
+      // 草稿操作
+      saveDailyDraft: (draft: DailyDraft) => set({ dailyDraft: draft }),
+      loadDailyDraft: () => get().dailyDraft,
+      clearDailyDraft: () => set({ dailyDraft: null }),
     }),
     {
       name: 'project-agent-storage',
       partialize: (state: AppState) => ({ 
         user: state.user, 
         token: state.token,
-        currentProject: state.currentProject 
+        currentProject: state.currentProject,
+        dailyDraft: state.dailyDraft  // 持久化草稿
       }),
     }
   )

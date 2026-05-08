@@ -223,7 +223,7 @@ def detect_alerts(project_id: int) -> List[Dict]:
         
         today = date.today()
         
-        # 1. 延期预警
+        # 1. 延期预警（只检测叶子任务，排除父节点）
         delayed_tasks = conn.execute(text("""
             WITH latest_version AS (
                 SELECT MAX(CAST(SUBSTRING(task_id FROM 'V([0-9]+)') AS INTEGER)) as max_ver
@@ -236,6 +236,7 @@ def detect_alerts(project_id: int) -> List[Dict]:
               AND pt.is_deleted = false
               AND pt.status != '已完成'
               AND pt.end_date < :today
+              AND (pt."isNode" = false OR pt."isNode" IS NULL)
               AND (
                   (lv.max_ver IS NULL OR lv.max_ver = 0 AND pt.is_latest = true)
                   OR CAST(SUBSTRING(pt.task_id FROM 'V([0-9]+)') AS INTEGER) = lv.max_ver
@@ -322,7 +323,7 @@ def detect_alerts(project_id: int) -> List[Dict]:
                 })
         
         # 4. 进度预警（对比项目实际进度 vs 计划进度）
-        # 获取项目的任务数据（含工期）
+        # 获取项目的叶子任务数据（含工期，排除分组父节点）
         tasks_info = conn.execute(text("""
             SELECT 
                 pt.progress,
@@ -333,6 +334,7 @@ def detect_alerts(project_id: int) -> List[Dict]:
             WHERE pt.project_id::integer = :pid
               AND pt.is_latest = true
               AND pt.is_deleted = false
+              AND (pt."isNode" = false OR pt."isNode" IS NULL)
         """), {"pid": project_id}).fetchall()
         
         if tasks_info and len(tasks_info) > 0:
@@ -348,11 +350,11 @@ def detect_alerts(project_id: int) -> List[Dict]:
                 task_end = t[2]
                 task_actual_end = t[3]
                 
-                # 计算任务工期（天）
+                # 计算任务工期（天）- 含首尾日，与详情页统一
                 if task_start and task_end:
                     start = task_start if isinstance(task_start, type(today)) else datetime.strptime(str(task_start), '%Y-%m-%d').date()
                     end = task_end if isinstance(task_end, type(today)) else datetime.strptime(str(task_end), '%Y-%m-%d').date()
-                    work_days = max((end - start).days, 1)
+                    work_days = max((end - start).days + 1, 1)  # 含首日
                 else:
                     work_days = 5  # 默认5天
                 
@@ -371,14 +373,14 @@ def detect_alerts(project_id: int) -> List[Dict]:
             actual_progress = round(completed_work_days / total_work_days * 100, 1) if total_work_days > 0 else 0
             
             # 获取项目时间范围计算计划进度
-            project = conn.execute(text("""
+            project_dates = conn.execute(text("""
                 SELECT start_date, end_date FROM projects WHERE id = :pid
             """), {"pid": project_id}).fetchone()
             
             planned_progress = 0
-            if project and project[0] and project[1]:
-                start_date = project[0]
-                end_date = project[1]
+            if project_dates and project_dates[0] and project_dates[1]:
+                start_date = project_dates[0]
+                end_date = project_dates[1]
                 today = datetime.now().date()
                 start = datetime.strptime(str(start_date), '%Y-%m-%d').date() if isinstance(start_date, str) else start_date
                 end = datetime.strptime(str(end_date), '%Y-%m-%d').date() if isinstance(end_date, str) else end_date
@@ -408,7 +410,7 @@ def detect_alerts(project_id: int) -> List[Dict]:
                         "total_tasks": len(tasks_info),
                         "lag_amount": round(lag_amount, 1)
                     },
-                    "responsible_users": [project[2]] if project[2] else []
+                    "responsible_users": []
                 })
     
     return alerts

@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 import { redirectToLogin } from '../utils/auth'
 import MobileNav from '../components/MobileNav'
-import { useState, useEffect } from 'react'
+import CalendarView from '../components/CalendarView'
+import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store'
-import { dailyApi } from '../api'
+import { dailyApi, projectApi } from '../api'
 import { showToast } from '../components/Toast'
 import { confirm } from '../components/ConfirmDialog'
 
@@ -19,6 +20,8 @@ interface ParsedEntry {
   matched_task_id?: string  // 新增：匹配的任务ID
   matched_task_name?: string
   match_confidence: number
+  shared_period?: string  // 共享时间段（多个事项共享同一时间段）
+  period_total_hours?: number  // 该时间段的总工时
 }
 
 interface HistoryReport {
@@ -47,12 +50,101 @@ interface ParseWarning {
 }
 
 export default function DailyPage() {
-  const { user, dailyEntries, addDailyEntry, removeDailyEntry, clearDailyEntries, logout } = useAppStore()
+  const { user, dailyEntries, addDailyEntry, removeDailyEntry, clearDailyEntries, logout, 
+          dailyDraft, saveDailyDraft, clearDailyDraft } = useAppStore()
+  
+  // 📌 所有状态变量
   const [inputText, setInputText] = useState('')
   const [isParsing, setIsParsing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
-
+  const [historyReports, setHistoryReports] = useState<HistoryReport[]>([])
+  const [parseWarnings, setParseWarnings] = useState<ParseWarning[]>([])
+  const [projectTasks, setProjectTasks] = useState<Record<number, Array<{task_id: string, task_name: string}>>>({})
+  const [loadingTasks, setLoadingTasks] = useState<Set<number>>(new Set())
+  const [taskSelectIndex, setTaskSelectIndex] = useState<number | null>(null)
+  const [taskSearchText, setTaskSearchText] = useState('')
+  const [matchedProjects, setMatchedProjects] = useState<Array<{id: number; name: string; leader: string}>>([])
+  const [hasParsed, setHasParsed] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(true)
+  const [viewingReport, setViewingReport] = useState<HistoryReport | null>(null)
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [draftRestored, setDraftRestored] = useState(false)  // 草稿是否已恢复
+  
+  // 用于追踪是否已提交
+  const hasSubmittedRef = useRef(false)
+  
+  // 日期
+  const now = new Date()
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const [selectedDate, setSelectedDate] = useState(today)
+  
+  // 📌 恢复草稿 - 使用单独的 useEffect 监听 dailyDraft 变化
+  useEffect(() => {
+    // 只在首次加载且草稿未恢复时执行
+    if (dailyDraft && !draftRestored) {
+      const draftTime = new Date(dailyDraft.updatedAt)
+      const hoursSinceDraft = (Date.now() - draftTime.getTime()) / (1000 * 60 * 60)
+      
+      if (hoursSinceDraft < 24 && (dailyDraft.inputText.trim() || dailyDraft.entries.length > 0)) {
+        console.log('[草稿恢复] 恢复内容:', dailyDraft)
+        setInputText(dailyDraft.inputText)
+        useAppStore.getState().setDailyEntries(dailyDraft.entries)
+        setSelectedDate(dailyDraft.selectedDate)
+        setParseWarnings((dailyDraft.warnings || []).map(w => ({
+          type: w.type as 'warning' | 'error' | 'info',
+          message: w.message
+        })))
+        setMatchedProjects(dailyDraft.matchedProjects || [])
+        setHasParsed(dailyDraft.hasParsed)
+        setDraftRestored(true)
+        
+        showToast(`已恢复上次未提交的日报草稿`, 'info')
+      } else if (hoursSinceDraft >= 24) {
+        // 草稿过期，清除
+        console.log('[草稿恢复] 草稿已过期，清除')
+        clearDailyDraft()
+        setDraftRestored(true)
+      }
+    }
+  }, [dailyDraft, draftRestored])
+  
+  // 📌 自动保存草稿（防抖）
+  const saveDraftDebounced = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    // 提交后不再保存
+    if (hasSubmittedRef.current) return
+    
+    // 只在有内容时保存
+    if (!inputText.trim() && dailyEntries.length === 0) {
+      return
+    }
+    
+    if (saveDraftDebounced.current) {
+      clearTimeout(saveDraftDebounced.current)
+    }
+    
+    saveDraftDebounced.current = setTimeout(() => {
+      console.log('[草稿保存] 保存内容')
+      saveDailyDraft({
+        inputText,
+        entries: dailyEntries,
+        selectedDate,
+        warnings: parseWarnings,
+        matchedProjects,
+        hasParsed,
+        updatedAt: new Date().toISOString()
+      })
+    }, 1000)
+    
+    return () => {
+      if (saveDraftDebounced.current) {
+        clearTimeout(saveDraftDebounced.current)
+      }
+    }
+  }, [inputText, dailyEntries, selectedDate, hasParsed, parseWarnings, matchedProjects])
+  
   // 点击外部关闭用户菜单
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -64,20 +156,6 @@ export default function DailyPage() {
     document.addEventListener('click', handleClickOutside)
     return () => document.removeEventListener('click', handleClickOutside)
   }, [showUserMenu])
-  const [historyReports, setHistoryReports] = useState<HistoryReport[]>([])
-  const [expandedReports, setExpandedReports] = useState<Set<number>>(new Set())  // 展开的日报ID
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true)
-  const [parseWarnings, setParseWarnings] = useState<ParseWarning[]>([])
-  const [matchedProjects, setMatchedProjects] = useState<Array<{id: number; name: string; leader: string}>>([])
-  const [hasParsed, setHasParsed] = useState(false)  // 是否已解析（避免切换日期时重复清空）
-  
-  // 使用本地日期，避免 toISOString() 转为 UTC 导致日期偏差
-  const now = new Date()
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  
-  // 新增：日期选择功能
-  const [selectedDate, setSelectedDate] = useState(today)
-  const [showDatePicker, setShowDatePicker] = useState(false)
   
   // 获取选中日期已有的日报
   const existingReport = historyReports.find(r => r.report_date === selectedDate)
@@ -119,15 +197,73 @@ export default function DailyPage() {
   // }, [selectedDate, hasParsed])
 
   const loadHistoryReports = async () => {
-    setIsLoadingHistory(true)
     try {
       const result = await dailyApi.getMyReports(1, 10)
       setHistoryReports(result.items || [])
     } catch (error) {
       console.error('加载历史日报失败:', error)
       setHistoryReports([])
+    }
+  }
+  
+  // 加载项目任务列表
+  const loadProjectTasks = async (projectId: number) => {
+    if (projectTasks[projectId] || loadingTasks.has(projectId)) return
+    
+    setLoadingTasks(prev => new Set(prev).add(projectId))
+    try {
+      const result = await projectApi.getTasks(projectId)
+      setProjectTasks(prev => ({
+        ...prev,
+        [projectId]: result.map(t => ({
+          task_id: t.task_id,
+          task_name: t.task_name
+        }))
+      }))
+    } catch (err) {
+      console.error('加载任务列表失败:', err)
     } finally {
-      setIsLoadingHistory(false)
+      setLoadingTasks(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(projectId)
+        return newSet
+      })
+    }
+  }
+  
+  // 手动选择任务
+  const handleSelectTask = (index: number, _projectId: number, taskId: string, taskName: string) => {
+    const newEntries = [...dailyEntries]
+    newEntries[index] = {
+      ...newEntries[index],
+      matched_task_id: taskId,
+      matched_task_name: taskName
+    }
+    useAppStore.getState().setDailyEntries(newEntries)
+  }
+  
+  // 日历选择日期（填报）- 只改日期，保留输入内容
+  const handleCalendarSelectDate = (date: string) => {
+    setSelectedDate(date)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  
+  // 日历查看日报详情
+  const handleCalendarViewReport = (report: any) => {
+    if (report.has_report) {
+      const historyReport: HistoryReport = {
+        id: report.id,
+        report_date: report.report_date,
+        total_hours: report.total_hours,
+        status: report.status,
+        created_at: report.created_at,
+        items: report.items || [],
+        original_input: report.original_input,
+        ai_parsed_data: report.ai_parsed_data,
+        ai_parsed: report.ai_parsed
+      }
+      setViewingReport(historyReport)
+      setShowReportModal(true)
     }
   }
 
@@ -178,7 +314,7 @@ export default function DailyPage() {
         // 解析失败，保留输入内容，给出提示
         setParseWarnings([
           { type: 'error' as const, message: '⚠️ 未识别到有效的工作事项，请检查输入格式' },
-          { type: 'info' as const, message: '💡 提示：请描述具体的工作内容和时间，例如"上午完成需求归档4小时"' }
+          { type: 'info' as const, message: '💡 提示：请描述具体的工作内容和时间，例如"xxx项目：上午完成方案编制4小时"' }
         ])
       }
     } catch (error: any) {
@@ -249,12 +385,17 @@ export default function DailyPage() {
         }
       })
       
+      // 📌 提交成功：标记已提交，清除草稿
+      hasSubmittedRef.current = true
+      setDraftRestored(false)
+      clearDailyDraft()
+      
       showToast(`${selectedDate} 日报提交成功！`, 'success')
       setInputText('')
       clearDailyEntries()
       setParseWarnings([])
       setMatchedProjects([])
-      setHasParsed(false)  // 提交成功后重置已解析状态
+      setHasParsed(false)
       loadHistoryReports()
     } catch (error: any) {
       const errorMsg = error.response?.data?.detail || '提交失败，请重试'
@@ -270,7 +411,31 @@ export default function DailyPage() {
     redirectToLogin()
   }
 
-  const totalHours = dailyEntries.reduce((sum, e) => sum + (e.hours || 0), 0)
+  const totalHours = dailyEntries.reduce((sum, e) => {
+    // 如果 hours=0 且有共享时间段，使用 period_total_hours
+    // 但同一时间段只计算一次（通过 shared_period 去重）
+    if (e.hours === 0 && e.shared_period && e.period_total_hours) {
+      // 检查是否已经计算过这个时间段
+      const firstWithSamePeriod = dailyEntries.findIndex(
+        entry => entry.shared_period === e.shared_period
+      )
+      // 只计算第一个出现的时间段
+      if (firstWithSamePeriod === dailyEntries.indexOf(e)) {
+        return sum + e.period_total_hours
+      }
+      return sum
+    }
+    return sum + (e.hours || 0)
+  }, 0)
+  
+  // 获取每个事项的显示工时
+  const getDisplayHours = (entry: typeof dailyEntries[0]) => {
+    // 如果 hours=0 且有共享时间段，显示总工时
+    if (entry.hours === 0 && entry.shared_period && entry.period_total_hours) {
+      return entry.period_total_hours
+    }
+    return entry.hours || 0
+  }
 
   // 示例文本作为 placeholder
   const placeholderText = `示例：今天做了以下工作：
@@ -298,7 +463,8 @@ export default function DailyPage() {
               <Link to="/" className="nav-link">个人</Link>
               <Link to="/daily" className="nav-link active">日报</Link>
               <Link to="/projects" className="nav-link">项目</Link>
-              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/tracking" className="nav-link">追踪</Link>
+              <Link to="/quality" className="nav-link">质量</Link>
               <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>
@@ -380,18 +546,9 @@ export default function DailyPage() {
                   <div
                     key={d.date}
                     onClick={() => {
-                      // 如果切换到新日期且已解析，询问是否保留
-                      if (d.date !== selectedDate && hasParsed && dailyEntries.length > 0) {
-                        // 不清空，保留解析结果（用户可能想提交到新日期）
-                        // 注释掉清空逻辑，让用户自己决定
-                      }
+                      // 只改日期，保留输入内容（草稿会自动保存）
                       setSelectedDate(d.date)
                       setShowDatePicker(false)
-                      // 已解析的内容不清空
-                      if (!hasParsed) {
-                        clearDailyEntries()
-                        setParseWarnings([])
-                      }
                     }}
                     style={{
                       padding: '10px 12px',
@@ -492,6 +649,105 @@ export default function DailyPage() {
               <span className="daily-input-subtitle">自然语言描述</span>
             </div>
             <div className="daily-input-body">
+              {/* 复制上次日报按钮 */}
+              {historyReports.length > 0 && (
+                <div style={{
+                  marginBottom: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}>
+                  <button
+                    onClick={() => {
+                      // 按日期排序，取最新的日报
+                      const latestReport = historyReports
+                        .sort((a, b) => new Date(b.report_date).getTime() - new Date(a.report_date).getTime())[0]
+                      
+                      if (latestReport) {
+                        // 复制原始输入到输入框
+                        if (latestReport.original_input) {
+                          setInputText(latestReport.original_input)
+                          showToast(`已复制 ${latestReport.report_date} 的日报内容`, 'success')
+                        } else {
+                          // 如果没有原始输入，从工作项重构文本
+                          const reconstructed = latestReport.items
+                            .map(item => {
+                              let text = item.work_content
+                              if (item.start_time && item.end_time) {
+                                text = `${item.start_time}-${item.end_time} ${text}`
+                              }
+                              if (item.project_name) {
+                                text += ` (${item.project_name})`
+                              }
+                              return text
+                            })
+                            .join('\n')
+                          
+                          setInputText(reconstructed)
+                          showToast(`已从 ${latestReport.report_date} 的日报重构内容`, 'success')
+                        }
+                        
+                        // 清空之前的解析结果
+                        clearDailyEntries()
+                        setParseWarnings([])
+                        setMatchedProjects([])
+                        setHasParsed(false)
+                      }
+                    }}
+                    style={{
+                      padding: '8px 16px',
+                      fontSize: '13px',
+                      fontWeight: 500,
+                      color: '#3b82f6',
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#dbeafe'
+                      e.currentTarget.style.borderColor = '#3b82f6'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#eff6ff'
+                      e.currentTarget.style.borderColor = '#bfdbfe'
+                    }}
+                  >
+                    <span>📋</span>
+                    <span>复制上次日报</span>
+                  </button>
+                  
+                  {/* 显示上次日报日期 */}
+                  {historyReports.length > 0 && (
+                    <span style={{
+                      fontSize: '12px',
+                      color: '#6b7280'
+                    }}>
+                      最近: {historyReports.sort((a, b) => new Date(b.report_date).getTime() - new Date(a.report_date).getTime())[0]?.report_date}
+                    </span>
+                  )}
+                </div>
+              )}
+              
+              {/* 草稿自动保存提示 */}
+              {(inputText.trim() || dailyEntries.length > 0) && (
+                <div style={{
+                  marginBottom: '8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontSize: '12px',
+                  color: '#10b981'
+                }}>
+                  <span>💾</span>
+                  <span>内容已自动保存为草稿，切换页面后可恢复</span>
+                </div>
+              )}
+              
               {/* 输入区域容器 */}
               <div style={{
                 position: 'relative',
@@ -537,7 +793,7 @@ export default function DailyPage() {
                             正在智能解析...
                           </div>
                           <div style={{fontSize: '12px', color: '#64748b', marginTop: '4px'}}>
-                            AI 正在识别项目和任务
+                            AI 正在识别项目和任务（预计 10-30 秒）
                           </div>
                         </div>
                       </div>
@@ -661,7 +917,13 @@ export default function DailyPage() {
                             <span className="tag tag-time" style={{whiteSpace: 'nowrap'}}>
                               🕐 {entry.start_time}-{entry.end_time}
                             </span>
-                            <span className="tag tag-hours" style={{whiteSpace: 'nowrap'}}>{entry.hours}h</span>
+                            {/* 显示工时（共享时段显示总工时） */}
+                            <span className="tag tag-hours" style={{whiteSpace: 'nowrap'}}>
+                              {getDisplayHours(entry).toFixed(1)}h
+                              {entry.hours === 0 && entry.shared_period && (
+                                <span style={{marginLeft: '4px', fontSize: '10px', opacity: 0.8}}>共享</span>
+                              )}
+                            </span>
                             {entry.location && (
                               <span className="tag tag-default" style={{whiteSpace: 'nowrap'}}>📍 {entry.location}</span>
                             )}
@@ -691,6 +953,7 @@ export default function DailyPage() {
                                   ? entry.matched_project_name.substring(0, 15) + '...' 
                                   : entry.matched_project_name}
                               </span>
+                              {/* 已匹配任务 */}
                               {entry.matched_task_name && (
                                 <span className="tag tag-info" style={{
                                   background: '#dbeafe', 
@@ -704,6 +967,29 @@ export default function DailyPage() {
                                     ? entry.matched_task_name.substring(0, 10) + '...' 
                                     : entry.matched_task_name}
                                 </span>
+                              )}
+                              {/* 未匹配任务时显示选择按钮 */}
+                              {!entry.matched_task_name && entry.matched_project_id && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setTaskSelectIndex(index)
+                                    setTaskSearchText('')
+                                    loadProjectTasks(entry.matched_project_id!)
+                                  }}
+                                  style={{
+                                    fontSize: '11px',
+                                    padding: '2px 8px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #bfdbfe',
+                                    background: '#eff6ff',
+                                    color: '#3b82f6',
+                                    cursor: 'pointer',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  + 选择任务
+                                </button>
                               )}
                             </div>
                           )}
@@ -786,274 +1072,420 @@ export default function DailyPage() {
           </div>
         </div>
 
-        {/* 历史日报记录 */}
+        {/* 日历视图 - 历史日报快速定位 */}
         <div className="card mt-6">
-          <div className="card-header">
-            <h2 className="card-title">📜 我的日报记录</h2>
-            <span className="text-sm text-gray-500">最近提交</span>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h2 className="card-title">📅 历史日报日历</h2>
+            <button
+              onClick={() => setShowCalendar(!showCalendar)}
+              style={{
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: 500,
+                color: showCalendar ? '#64748b' : '#3b82f6',
+                background: showCalendar ? '#f1f5f9' : '#eff6ff',
+                border: '1px solid ' + (showCalendar ? '#e5e7eb' : '#bfdbfe'),
+                borderRadius: '6px',
+                cursor: 'pointer'
+              }}
+            >
+              {showCalendar ? '收起' : '展开'}
+            </button>
           </div>
-          <div className="card-body">
-            {isLoadingHistory ? (
-              <div className="empty-state">
-                <span className="spinner"></span>
-                <p className="text-gray-500 mt-2">加载中...</p>
+          {showCalendar && (
+            <div className="card-body" style={{ padding: '16px' }}>
+              <CalendarView 
+                onSelectDate={handleCalendarSelectDate}
+                onViewReport={handleCalendarViewReport}
+              />
+            </div>
+          )}
+        </div>
+
+      </main>
+
+      {/* 日报详情弹窗 */}
+      {showReportModal && viewingReport && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px'
+          }}
+          onClick={() => setShowReportModal(false)}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              maxWidth: '500px',
+              width: '100%',
+              maxHeight: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 弹窗头部 */}
+            <div style={{
+              padding: '16px',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              color: 'white'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: '600' }}>
+                    📅 {viewingReport.report_date}
+                  </div>
+                  <div style={{ fontSize: '13px', opacity: 0.8, marginTop: '4px' }}>
+                    {viewingReport.status} · {viewingReport.total_hours.toFixed(1)} 小时
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowReportModal(false)}
+                  style={{
+                    background: 'rgba(255,255,255,0.2)',
+                    border: 'none',
+                    color: 'white',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '18px'
+                  }}
+                >
+                  ✕
+                </button>
               </div>
-            ) : historyReports.length === 0 ? (
-              <div className="empty-state">
-                <div className="empty-icon">📭</div>
-                <p className="empty-title">暂无历史记录</p>
-                <p className="empty-desc">提交的日报将在这里显示</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {historyReports.map((report) => {
-                  const isExpanded = expandedReports.has(report.id)
+            </div>
+            
+            {/* 弹窗内容 */}
+            <div style={{ 
+              padding: '16px', 
+              overflowY: 'auto',
+              flex: 1 
+            }}>
+              {/* 原始输入 */}
+              {viewingReport.original_input && (
+                <div style={{
+                  padding: '12px',
+                  background: '#fef3c7',
+                  borderRadius: '8px',
+                  marginBottom: '12px',
+                  fontSize: '13px'
+                }}>
+                  <div style={{ fontWeight: '600', color: '#92400e', marginBottom: '6px' }}>
+                    📝 原始输入
+                  </div>
+                  <div style={{ color: '#78350f', whiteSpace: 'pre-wrap' }}>
+                    {viewingReport.original_input}
+                  </div>
+                </div>
+              )}
+              
+              {/* 按项目分组的工作项 */}
+              {viewingReport.items && viewingReport.items.length > 0 ? (
+                (() => {
+                  const groupedItems = viewingReport.items.reduce((acc, item) => {
+                    const projectName = item.project_name || '其他'
+                    if (!acc[projectName]) acc[projectName] = []
+                    acc[projectName].push(item)
+                    return acc
+                  }, {} as Record<string, typeof viewingReport.items>)
                   
-                  return (
-                    <div key={report.id} className="history-report-item">
-                      <div 
-                        style={{
-                          padding: '12px',
-                          borderBottom: '1px solid #e5e7eb',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px'
-                        }}
-                      >
-                        {/* 第一行：日期和展开箭头 */}
-                        <div 
-                          onClick={() => {
-                            const newExpanded = new Set(expandedReports)
-                            if (isExpanded) {
-                              newExpanded.delete(report.id)
-                            } else {
-                              newExpanded.add(report.id)
-                            }
-                            setExpandedReports(newExpanded)
-                          }}
-                          style={{ 
-                            cursor: 'pointer', 
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                          }}
-                        >
-                          <span style={{fontSize: '18px'}}>📅</span>
-                          <span style={{fontWeight: 600, color: '#1f2937', fontSize: '15px'}}>{report.report_date}</span>
-                          <span style={{
-                            fontSize: '11px',
-                            color: '#64748b',
-                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                            transition: 'transform 0.2s'
-                          }}>▼</span>
-                        </div>
-                        
-                        {/* 第二行：状态、工时、编辑按钮 */}
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '8px',
-                          flexWrap: 'wrap'
-                        }}>
-                          <span style={{
-                            fontSize: '11px',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            background: report.status === '已提交' ? '#d1fae5' : '#fef3c7',
-                            color: report.status === '已提交' ? '#059669' : '#d97706'
-                          }}>
-                            {report.status === '已提交' ? '✓ 已提交' : report.status}
-                          </span>
-                          <span style={{
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: '#3b82f6',
-                            background: '#eff6ff',
-                            padding: '2px 8px',
-                            borderRadius: '4px'
-                          }}>
-                            {report.total_hours}h
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedDate(report.report_date)
-                              if (report.original_input) {
-                                setInputText(report.original_input)
-                              }
-                              window.scrollTo({ top: 0, behavior: 'smooth' })
-                            }}
-                            style={{
-                              padding: '4px 12px',
-                              fontSize: '12px',
-                              fontWeight: 500,
-                              color: '#3b82f6',
-                              background: '#eff6ff',
-                              border: '1px solid #bfdbfe',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              marginLeft: 'auto',
-                              whiteSpace: 'nowrap'
-                            }}
-                          >
-                            编辑
-                          </button>
-                        </div>
+                  return Object.entries(groupedItems).map(([projectName, items]) => (
+                    <div key={projectName} style={{ marginBottom: '12px' }}>
+                      <div style={{
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                        borderRadius: '8px 8px 0 0',
+                        color: 'white',
+                        fontSize: '13px',
+                        fontWeight: '500'
+                      }}>
+                        📁 {projectName}
+                        <span style={{ marginLeft: '8px', opacity: 0.8 }}>
+                          ({items.length}项 · {items.reduce((s, i) => s + i.hours_spent, 0).toFixed(1)}h)
+                        </span>
                       </div>
-                      
-                      {isExpanded && (
-                        <div className="daily-history-items">
-                          {/* 原始输入 */}
-                          {report.original_input && (
-                            <div style={{
-                              padding: '12px',
-                              background: '#fef3c7',
-                              borderRadius: '6px',
-                              marginBottom: '12px',
-                              fontSize: '13px'
+                      <div style={{ background: '#f8fafc', borderRadius: '0 0 8px 8px', padding: '8px' }}>
+                        {items.map((item, idx) => (
+                          <div key={idx} style={{
+                            padding: '8px',
+                            background: 'white',
+                            marginBottom: '6px',
+                            borderRadius: '6px',
+                            border: '1px solid #e5e7eb'
+                          }}>
+                            <div style={{ 
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '6px',
+                              marginBottom: '4px',
+                              flexWrap: 'wrap'
                             }}>
-                              <div style={{fontWeight: '600', color: '#92400e', marginBottom: '6px'}}>
-                                📝 原始输入
+                              {item.start_time && item.end_time && (
+                                <span style={{
+                                  fontSize: '11px',
+                                  color: '#059669',
+                                  background: '#d1fae5',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px'
+                                }}>
+                                  ⏰ {item.start_time}-{item.end_time}
+                                </span>
+                              )}
+                              <span style={{
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                color: '#3b82f6',
+                                marginLeft: 'auto'
+                              }}>{item.hours_spent}h</span>
+                            </div>
+                            <div style={{ fontSize: '13px', color: '#374151' }}>
+                              {item.work_content}
+                            </div>
+                            {item.task_id && (
+                              <div style={{ marginTop: '4px' }}>
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  background: '#fef3c7',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  color: '#92400e'
+                                }}>
+                                  🎯 {item.task_name || item.task_id}
+                                </span>
                               </div>
-                              <div style={{color: '#78350f', whiteSpace: 'pre-wrap'}}>
-                                {report.original_input}
-                              </div>
-                            </div>
-                          )}
-                          
-                          {/* 按项目分组的工作项 */}
-                          {report.items.length === 0 ? (
-                            <div style={{padding: '16px', textAlign: 'center', color: '#64748b'}}>
-                              暂无详细工作项
-                            </div>
-                          ) : (
-                            (() => {
-                              // 按项目分组
-                              const groupedItems = report.items.reduce((acc, item) => {
-                                const projectName = item.project_name || '其他'
-                                if (!acc[projectName]) {
-                                  acc[projectName] = []
-                                }
-                                acc[projectName].push(item)
-                                return acc
-                              }, {} as Record<string, typeof report.items>)
-                              
-                              return Object.entries(groupedItems).map(([projectName, items]) => (
-                                <div key={projectName} className="daily-history-group">
-                                  <div className="daily-history-group-header">
-                                    <span style={{fontSize: '14px'}}>📁</span>
-                                    <span style={{fontSize: '14px', flex: '1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>{projectName}</span>
-                                    <span style={{
-                                      fontSize: '11px',
-                                      fontWeight: '400',
-                                      color: 'rgba(255,255,255,0.8)',
-                                      whiteSpace: 'nowrap'
-                                    }}>
-                                      {items.length}项 · {items.reduce((sum, i) => sum + i.hours_spent, 0).toFixed(1)}h
-                                    </span>
-                                  </div>
-                                  
-                                  {items.map((item, idx) => (
-                                    <div key={idx} style={{
-                                      padding: '10px 12px',
-                                      background: '#fafafa',
-                                      marginBottom: '8px',
-                                      borderRadius: '6px'
-                                    }}>
-                                      {/* 时间和工时 - 一行显示 */}
-                                      <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        marginBottom: '6px',
-                                        flexWrap: 'wrap'
-                                      }}>
-                                        {item.start_time && item.end_time ? (
-                                          <span style={{
-                                            fontSize: '12px',
-                                            color: '#059669',
-                                            background: '#d1fae5',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px',
-                                            whiteSpace: 'nowrap'
-                                          }}>
-                                            ⏰ {item.start_time}-{item.end_time}
-                                          </span>
-                                        ) : (
-                                          <span style={{
-                                            fontSize: '12px',
-                                            color: '#94a3b8',
-                                            background: '#f1f5f9',
-                                            padding: '2px 6px',
-                                            borderRadius: '4px'
-                                          }}>
-                                            ⏱️ 未记录
-                                          </span>
-                                        )}
-                                        <span style={{
-                                          fontSize: '13px',
-                                          fontWeight: 600,
-                                          color: '#3b82f6',
-                                          marginLeft: 'auto'
-                                        }}>{item.hours_spent}h</span>
-                                      </div>
-                                      
-                                      {/* 工作内容 */}
-                                      <div style={{
-                                        fontSize: '13px',
-                                        color: '#374151',
-                                        lineHeight: 1.5,
-                                        wordBreak: 'break-word'
-                                      }}>{item.work_content}</div>
-                                      {item.task_id && (
-                                        <div style={{marginTop: '4px'}}>
-                                          <span style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            padding: '2px 8px',
-                                            background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                                            borderRadius: '10px',
-                                            fontSize: '11px',
-                                            fontWeight: '600',
-                                            color: 'white',
-                                            whiteSpace: 'nowrap',
-                                            maxWidth: '100%',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis'
-                                          }}>
-                                            🎯 {item.task_name || item.task_id}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              ))
-                            })()
-                          )}
-                          
-                          {report.ai_parsed && (
-                            <div style={{
-                              marginTop: '12px',
-                              padding: '8px 12px',
-                              background: '#f0fdf4',
-                              borderRadius: '6px',
-                              fontSize: '12px',
-                              color: '#16a34a'
-                            }}>
-                              ✨ AI 智能解析
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  )
-                })}
-              </div>
-            )}
+                  ))
+                })()
+              ) : (
+                <div style={{ textAlign: 'center', color: '#64748b', padding: '20px' }}>
+                  暂无详细工作项
+                </div>
+              )}
+              
+              {viewingReport.ai_parsed && (
+                <div style={{
+                  marginTop: '12px',
+                  textAlign: 'center',
+                  padding: '8px',
+                  background: '#f0fdf4',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  color: '#16a34a'
+                }}>
+                  ✨ AI 智能解析
+                </div>
+              )}
+            </div>
+            
+            {/* 弹窗底部 */}
+            <div style={{
+              padding: '12px 16px',
+              borderTop: '1px solid #e5e7eb',
+              display: 'flex',
+              gap: '8px'
+            }}>
+              <button
+                onClick={() => {
+                  setShowReportModal(false)
+                  handleCalendarSelectDate(viewingReport.report_date)
+                  if (viewingReport.original_input) {
+                    setInputText(viewingReport.original_input)
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '8px',
+                  color: '#3b82f6',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                ✏️ 编辑此日报
+              </button>
+              <button
+                onClick={() => setShowReportModal(false)}
+                style={{
+                  flex: 1,
+                  padding: '12px',
+                  background: '#f1f5f9',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  color: '#64748b',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                关闭
+              </button>
+            </div>
           </div>
         </div>
-      </main>
+      )}
+
+      {/* 任务选择弹窗 */}
+      {taskSelectIndex !== null && dailyEntries[taskSelectIndex] && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '16px'
+          }}
+          onClick={() => setTaskSelectIndex(null)}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              maxWidth: '400px',
+              width: '100%',
+              maxHeight: '70vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 弹窗头部 */}
+            <div style={{
+              padding: '16px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: '600', color: '#1f2937' }}>
+                  选择任务
+                </div>
+                <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                  {dailyEntries[taskSelectIndex].matched_project_name}
+                </div>
+              </div>
+              <button
+                onClick={() => setTaskSelectIndex(null)}
+                style={{
+                  background: '#f3f4f6',
+                  border: 'none',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '18px',
+                  color: '#6b7280'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* 搜索框 */}
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #e5e7eb' }}>
+              <input
+                type="text"
+                placeholder="搜索任务名称..."
+                value={taskSearchText}
+                onChange={(e) => setTaskSearchText(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  outline: 'none'
+                }}
+                autoFocus
+              />
+            </div>
+            
+            {/* 任务列表 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
+              {loadingTasks.has(dailyEntries[taskSelectIndex].matched_project_id!) ? (
+                <div style={{ textAlign: 'center', padding: '20px', color: '#6b7280' }}>
+                  加载中...
+                </div>
+              ) : (
+                (() => {
+                  const projectId = dailyEntries[taskSelectIndex].matched_project_id!
+                  const tasks = projectTasks[projectId] || []
+                  const filteredTasks = tasks.filter(t => 
+                    t.task_name.toLowerCase().includes(taskSearchText.toLowerCase())
+                  )
+                  
+                  if (filteredTasks.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '20px', color: '#9ca3af' }}>
+                        {taskSearchText ? '未找到匹配的任务' : '暂无任务'}
+                      </div>
+                    )
+                  }
+                  
+                  return filteredTasks.map(t => (
+                    <div
+                      key={t.task_id}
+                      onClick={() => {
+                        handleSelectTask(taskSelectIndex, projectId, t.task_id, t.task_name)
+                        setTaskSelectIndex(null)
+                        setTaskSearchText('')
+                      }}
+                      style={{
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        marginBottom: '4px',
+                        transition: 'background 0.15s'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#f3f4f6'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent'
+                      }}
+                    >
+                      <div style={{ fontSize: '14px', color: '#1f2937' }}>
+                        {t.task_name}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '2px' }}>
+                        {t.task_id}
+                      </div>
+                    </div>
+                  ))
+                })()
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 移动端底部导航 */}
       <MobileNav active="daily" />

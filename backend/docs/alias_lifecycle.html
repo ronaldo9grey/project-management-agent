@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目别名生命周期状态图</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            max-width: 1100px;
+        }
+        h1 {
+            text-align: center;
+            color: #1a365d;
+            margin-bottom: 30px;
+            font-size: 28px;
+        }
+        .diagram {
+            position: relative;
+            height: 700px;
+        }
+        .state {
+            position: absolute;
+            padding: 15px 25px;
+            border-radius: 12px;
+            text-align: center;
+            font-weight: bold;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            transition: all 0.3s;
+        }
+        .state:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.25);
+        }
+        .state .title {
+            font-size: 16px;
+            color: #1a365d;
+            margin-bottom: 5px;
+        }
+        .state .desc {
+            font-size: 12px;
+            color: #4a5568;
+            font-weight: normal;
+        }
+        .state.initial {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            border: 2px solid #6366f1;
+        }
+        .state.collecting {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 2px solid #f59e0b;
+        }
+        .state.pending {
+            background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%);
+            border: 2px solid #ea580c;
+        }
+        .state.active {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            border: 2px solid #10b981;
+        }
+        .state.deleted {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            border: 2px solid #ef4444;
+        }
+        .state.deprecated {
+            background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%);
+            border: 2px solid #6b7280;
+        }
+        
+        .arrow {
+            position: absolute;
+            background: #64748b;
+            height: 3px;
+            transform-origin: left center;
+        }
+        .arrow::after {
+            content: '';
+            position: absolute;
+            right: -8px;
+            top: -6px;
+            border: 7px solid transparent;
+            border-left: 12px solid #64748b;
+        }
+        .arrow-label {
+            position: absolute;
+            background: white;
+            padding: 3px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #475569;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            white-space: nowrap;
+        }
+        
+        .legend {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+        .legend-color {
+            width: 30px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        
+        .stats-box {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 15px;
+            font-size: 13px;
+        }
+        .stats-box h4 {
+            margin: 0 0 10px 0;
+            color: #1e293b;
+        }
+        .stats-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 5px 0;
+        }
+        .stats-row span:first-child {
+            color: #64748b;
+        }
+        .stats-row span:last-child {
+            font-weight: bold;
+            color: #1e293b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 项目别名生命周期状态图</h1>
+        
+        <div class="diagram">
+            <!-- 状态节点 -->
+            <div class="state initial" style="top: 20px; left: 450px;">
+                <div class="title">🔹 未出现</div>
+                <div class="desc">别名首次进入系统</div>
+            </div>
+            
+            <div class="state collecting" style="top: 130px; left: 450px;">
+                <div class="title">📝 收集中</div>
+                <div class="desc">用户纠正记录累积</div>
+                <div class="desc" style="color: #d97706;">freq < 3次</div>
+            </div>
+            
+            <div class="state pending" style="top: 260px; left: 250px;">
+                <div class="title">⏳ 待审核</div>
+                <div class="desc">置信度计算完成</div>
+                <div class="desc" style="color: #ea580c;">is_active = FALSE</div>
+            </div>
+            
+            <div class="state active" style="top: 400px; left: 250px;">
+                <div class="title">✅ 生效中</div>
+                <div class="desc">自动匹配使用</div>
+                <div class="desc" style="color: #059669;">is_active = TRUE</div>
+            </div>
+            
+            <div class="state deleted" style="top: 260px; left: 650px;">
+                <div class="title">❌ 已删除</div>
+                <div class="desc">管理员拒绝</div>
+                <div class="desc" style="color: #dc2626;">记录移除</div>
+            </div>
+            
+            <div class="state deprecated" style="top: 530px; left: 250px;">
+                <div class="title">⏸️ 已弃用</div>
+                <div class="desc">长期未使用</div>
+                <div class="desc" style="color: #4b5563;">is_active = FALSE</div>
+            </div>
+            
+            <!-- 使用统计节点 -->
+            <div class="state" style="top: 400px; left: 550px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border: 2px solid #3b82f6;">
+                <div class="title">📈 使用统计</div>
+                <div class="desc">usage_count++</div>
+                <div class="desc" style="color: #2563eb;">记录使用频率</div>
+            </div>
+            
+            <!-- SVG箭头 -->
+            <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+                <!-- 未出现 → 收集中 -->
+                <defs>
+                    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+                    </marker>
+                    <marker id="arrowhead-green" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#10b981" />
+                    </marker>
+                    <marker id="arrowhead-red" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#ef4444" />
+                    </marker>
+                    <marker id="arrowhead-gray" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                        <polygon points="0 0, 10 3.5, 0 7" fill="#6b7280" />
+                    </marker>
+                </defs>
+                
+                <!-- 箭头1: 未出现 → 收集中 -->
+                <line x1="520" y1="75" x2="520" y2="120" stroke="#64748b" stroke-width="2" marker-end="url(#arrowhead)" />
+                <rect x="535" y="80" width="100" height="20" fill="white" rx="4" />
+                <text x="545" y="94" font-size="11" fill="#475569">用户纠正</text>
+                
+                <!-- 箭头2: 收集中 → 待审核 -->
+                <path d="M 450 190 L 350 250" stroke="#f59e0b" stroke-width="2" fill="none" marker-end="url(#arrowhead)" />
+                <rect x="340" y="200" width="100" height="20" fill="white" rx="4" />
+                <text x="350" y="214" font-size="11" fill="#475569">频次 ≥ 3</text>
+                
+                <!-- 箭头3: 待审核 → 生效 (绿色) -->
+                <line x1="350" y1="320" x2="350" y2="380" stroke="#10b981" stroke-width="3" marker-end="url(#arrowhead-green)" />
+                <rect x="365" y="340" width="110" height="20" fill="white" rx="4" />
+                <text x="375" y="354" font-size="11" fill="#059669" font-weight="bold">✓ 管理员批准</text>
+                
+                <!-- 箭头4: 待审核 → 删除 (红色) -->
+                <path d="M 450 290 L 650 290" stroke="#ef4444" stroke-width="2" fill="none" marker-end="url(#arrowhead-red)" />
+                <rect x="510" y="265" width="110" height="20" fill="white" rx="4" />
+                <text x="520" y="279" font-size="11" fill="#dc2626" font-weight="bold">✗ 管理员拒绝</text>
+                
+                <!-- 箭头5: 生效 → 使用统计 -->
+                <line x1="450" y1="440" x2="550" y2="440" stroke="#3b82f6" stroke-width="2" marker-end="url(#arrowhead)" />
+                <rect x="470" y="420" width="70" height="18" fill="white" rx="4" />
+                <text x="480" y="433" font-size="11" fill="#2563eb">用户使用</text>
+                
+                <!-- 箭头6: 使用统计 → 生效 (循环) -->
+                <path d="M 650 440 Q 700 440 700 480 Q 700 520 650 520 Q 550 520 450 480" stroke="#6b7280" stroke-width="2" fill="none" stroke-dasharray="5,5" marker-end="url(#arrowhead-gray)" />
+                <rect x="700" y="460" width="80" height="18" fill="white" rx="4" />
+                <text x="710" y="473" font-size="11" fill="#4b5563">继续使用</text>
+                
+                <!-- 箭头7: 生效 → 弃用 -->
+                <line x1="350" y1="480" x2="350" y2="520" stroke="#6b7280" stroke-width="2" stroke-dasharray="5,5" marker-end="url(#arrowhead-gray)" />
+                <rect x="365" y="490" width="100" height="18" fill="white" rx="4" />
+                <text x="375" y="503" font-size="11" fill="#4b5563">30天未使用</text>
+                
+                <!-- 箭头8: 收集中 → 收集中 (自循环) -->
+                <path d="M 590 160 Q 650 160 650 200 Q 650 240 590 200" stroke="#f59e0b" stroke-width="2" fill="none" marker-end="url(#arrowhead)" stroke-dasharray="5,5" />
+                <rect x="660" y="175" width="80" height="18" fill="white" rx="4" />
+                <text x="670" y="188" font-size="11" fill="#d97706">继续纠正</text>
+            </svg>
+            
+            <!-- 统计信息框 -->
+            <div class="stats-box">
+                <h4>📊 阈值参数</h4>
+                <div class="stats-row">
+                    <span>最低频次:</span>
+                    <span>3次</span>
+                </div>
+                <div class="stats-row">
+                    <span>自动批准:</span>
+                    <span style="color: #10b981;">≥ 0.85</span>
+                </div>
+                <div class="stats-row">
+                    <span>待审核:</span>
+                    <span style="color: #f59e0b;">0.70 - 0.85</span>
+                </div>
+                <div class="stats-row">
+                    <span>弃用周期:</span>
+                    <span>30天</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 图例 -->
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%); border: 1px solid #6366f1;"></div>
+                <span>初始状态</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid #f59e0b;"></div>
+                <span>数据收集</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #fed7aa 0%, #fdba74 100%); border: 1px solid #ea580c;"></div>
+                <span>待审核</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%); border: 1px solid #10b981;"></div>
+                <span>生效使用</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); border: 1px solid #ef4444;"></div>
+                <span>已删除</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%); border: 1px solid #6b7280;"></div>
+                <span>已弃用</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -429,6 +429,7 @@ class ProjectInfo(BaseModel):
     leader: str
     status: str
     progress: float
+    project_year: Optional[int] = None
 
 class TaskInfo(BaseModel):
     task_id: str
@@ -625,6 +626,12 @@ async def parse_daily_text_smart(text: str, projects: List[Dict], current_date: 
 - 下午：13:45-18:00
 - **加班**：18:00之后的时间
 
+**⚠️ 时间格式错误处理（默认开始时间）**：
+- 如果用户描述的时间格式不符合标准（如"8:45到15:30"写成了"8:45-15:30 xxx"但未正确分隔）
+- 或者开始时间异常（如早于08:15），**默认按08:15开始工作**
+- 结束时间保持用户描述的值
+- 例如：用户写"8:45到15:30 xxx项目"，但实际识别困难，默认从08:15开始计算
+
 **时间段分隔符识别**：
 - 分号（;或；）：分隔不同的工作时间段
 - 例如："上午:9:00-12:00编写xxx；下午：16:00-20:00到yyy"
@@ -676,8 +683,55 @@ async def parse_daily_text_smart(text: str, projects: List[Dict], current_date: 
 - 必须生成独立的加班条目
 
 ### 4. 项目匹配
-- 使用【模糊匹配】：检查日报中的项目关键词
-- 关键词提取：去掉"项目"、"工程"、"研究"等通用词
+
+**已知项目别名映射表（优先匹配）**：
+
+| 用户常用别名 | 项目ID | 正式项目名 |
+|------------|-------|-----------|
+| 炭渣项目 | 32 | 铝电解碳渣低温氧化处理技术 |
+| 炭渣试验 | 32 | 铝电解碳渣低温氧化处理技术 |
+| 田阳铝厂电解质炭渣处理 | 32 | 铝电解碳渣低温氧化处理技术 |
+| 锰渣无害化 | 33 | 电解锰渣无害化处理项目 |
+| 锰渣专题 | 33 | 电解锰渣无害化处理项目 |
+| 锰锭试制 | 34 | 落地锰转化锰锭项目 |
+| 田林铝厂供电整流 | 19 | 田林铝厂供电整流PLC控制系统稳定性研发项目 |
+| 隆林铝厂除尘器 | 18 | 隆林铝厂除尘器布袋脉冲精准控制研究 |
+| 隆林铝厂空压机 | 20 | 隆林铝厂空压机集中控制项目研究 |
+| 田林铝厂空压机 | 23 | 田林铝厂空压机集中控制项目研究 |
+| 德保铝厂空压机 | 22 | 德保铝厂空压机集中控制项目研究 |
+| 田阳铝厂空压机 | 21 | 田阳铝厂空压机集中控制项目研究 |
+| 电解槽新烟管 | 12 | 600KA槽上部烟气治理的技术研究 |
+| 新烟管 | 12 | 600KA槽上部烟气治理的技术研究 |
+| 新烟管软连接 | 12 | 600KA槽上部烟气治理的技术研究 |
+| 烟管软连接 | 12 | 600KA槽上部烟气治理的技术研究 |
+| 600KA槽烟气 | 12 | 600KA槽上部烟气治理的技术研究 |
+| 槽上部烟气 | 12 | 600KA槽上部烟气治理的技术研究 |
+| 德保铝厂化锰筑炉 | 34 | 落地锰转化锰锭项目 |
+| 铁锭模 | 34 | 落地锰转化锰锭项目 |
+| 锰锭试制 | 34 | 落地锰转化锰锭项目 |
+| 德保铝厂化锰铸锰锭 | 34 | 落地锰转化锰锭项目 |
+| 电解铝多功能天车抓斗 | 14 | 一种新型电解铝多功能天车抓斗结构的设计及产业化 |
+| 田林电解天车抓斗 | 14 | 一种新型电解铝多功能天车抓斗结构的设计及产业化 |
+| 天车抓斗改进 | 14 | 一种新型电解铝多功能天车抓斗结构的设计及产业化 |
+| 抓斗产业化 | 14 | 一种新型电解铝多功能天车抓斗结构的设计及产业化 |
+| 隆林铝厂除尘器 | 18 | 隆林铝厂除尘器布袋脉冲精准控制研究 |
+| 田林铝厂供电整流 | 19 | 田林铝厂供电整流PLC控制系统稳定性研发项目 |
+| 隆林铝厂整流系统 | 24 | 隆林铝厂整流系统总调PLC升级改造项目 |
+| 隆林铝厂空压机 | 20 | 隆林铝厂空压机集中控制项目研究 |
+| 田阳铝厂电解质炭渣处理 | 32 | 铝电解碳渣低温氧化处理技术 |
+| 炭渣项目 | 32 | 铝电解碳渣低温氧化处理技术 |
+| 炭渣试验 | 32 | 铝电解碳渣低温氧化处理技术 |
+| 锰渣专题 | 33 | 电解锰渣无害化处理项目 |
+| 锰渣固化 | 33 | 电解锰渣无害化处理项目 |
+| 锰渣无害化 | 33 | 电解锰渣无害化处理项目 |
+
+**匹配优先级**：
+1. 别名映射表精确匹配 → 直接输出项目ID
+2. 模糊匹配 → 检查关键词是否包含在正式项目名中
+3. 无法匹配 → project_hint填"其他工作"，matched_project_id填null
+
+**模糊匹配规则**：
+- 关键词提取：去掉"项目"、"工程"、"研究"、"系统"等通用词
 - 例如："隆林铝厂除尘器" → 匹配 "隆林铝厂除尘器布袋脉冲精准控制研究项目"
 
 ### 5. 内容润色（重要！按STAR原则改写）
@@ -924,12 +978,20 @@ def simple_parse_fallback(text: str, projects: List[Dict]) -> List[Dict]:
     # 提取时间信息
     time_pattern = r'(\d{1,2}[：:]\d{2})\s*[-~至到]+\s*(\d{1,2}[：:]\d{2})'
     time_match = re.search(time_pattern, text)
+    # ⚠️ 默认开始时间：08:15（标准工作时间）
     start_time = "08:15"
     end_time = "18:00"
     
     if time_match:
         start_time = time_match.group(1).replace('：', ':')
         end_time = time_match.group(2).replace('：', ':')
+        # ⚠️ 如果开始时间早于08:15，默认设为08:15
+        try:
+            s_h, s_m = int(start_time[:2]), int(start_time[3:5])
+            if s_h < 8 or (s_h == 8 and s_m < 15):
+                start_time = "08:15"
+        except:
+            start_time = "08:15"
 
     # 提取工时信息（如果用户明确说了"做了X小时"）
     hours_pattern = r'(\d+(?:\.\d+)?)\s*小时'
@@ -1112,7 +1174,10 @@ async def smart_parse_daily(
                 "end_time": time_info.get("end"),
                 "hours": time_info.get("hours", 4.0),
                 "is_overtime": time_info.get("is_overtime", False),
-                "confidence": entry.get("confidence", 0.8)
+                "confidence": entry.get("confidence", 0.8),
+                # 共享时间段相关
+                "shared_period": time_info.get("shared_period"),
+                "period_total_hours": time_info.get("period_total_hours")
             }
             
             entries.append(formatted_entry)
@@ -1408,6 +1473,186 @@ async def get_my_daily_reports(
         import traceback
         traceback.print_exc()
         return {"items": [], "total": 0, "page": page, "size": size}
+
+
+@app.get("/api/agent/daily/monthly-summary")
+async def get_daily_monthly_summary(
+    year: int,
+    month: int,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取某月的日报摘要 - 用于日历视图
+    返回每日是否有日报及工时
+    同时返回月度统计：工作日、总日报数、总工时
+    """
+    try:
+        username = current_user.get("username") or current_user.get("sub")
+        employee_id = current_user.get("employee_id") or username
+
+        # 计算该月起止日期
+        start_date = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_date = f"{year + 1}-01-01"
+        else:
+            end_date = f"{year}-{month + 1:02d}-01"
+
+        # 计算当月工作日数（广西节假日）
+        guangxi_holidays_2026 = {
+            (2026, 4, 4), (2026, 4, 5), (2026, 4, 6),  # 清明
+            (2026, 4, 17), (2026, 4, 20),  # 三月三
+            (2026, 5, 1), (2026, 5, 2), (2026, 5, 3), (2026, 5, 4), (2026, 5, 5),  # 劳动节
+            (2026, 6, 20), (2026, 6, 21), (2026, 6, 22),  # 端午
+            (2026, 9, 25), (2026, 9, 26), (2026, 9, 27),  # 中秋
+            (2026, 10, 1), (2026, 10, 2), (2026, 10, 3), (2026, 10, 4),
+            (2026, 10, 5), (2026, 10, 6), (2026, 10, 7), (2026, 10, 8),  # 国庆
+        }
+        guangxi_workdays_2026 = {
+            (2026, 5, 9),  # 劳动节补班
+        }
+        
+        month_start = datetime(year, month, 1).date()
+        month_end_date = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+        working_days = 0
+        
+        current = month_start
+        while current <= month_end_date:
+            weekday = current.weekday()
+            date_tuple = (current.year, current.month, current.day)
+            
+            if date_tuple in guangxi_workdays_2026:
+                working_days += 1
+            elif date_tuple in guangxi_holidays_2026:
+                pass
+            elif weekday < 5:
+                working_days += 1
+            
+            current += timedelta(days=1)
+
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT 
+                    EXTRACT(DAY FROM dr.report_date)::int as day,
+                    dr.id as report_id,
+                    COALESCE(SUM(dwi.hours_spent), 0) as total_hours
+                FROM daily_reports dr
+                LEFT JOIN daily_work_items dwi ON dwi.report_id = dr.id
+                WHERE dr.employee_id = :eid
+                  AND dr.report_date >= :start_date
+                  AND dr.report_date < :end_date
+                  AND dr.is_deleted = false
+                GROUP BY dr.report_date, dr.id
+                ORDER BY dr.report_date
+            """), {"eid": employee_id, "start_date": start_date, "end_date": end_date})
+
+            days = {}
+            total_hours = 0
+            report_count = 0
+            
+            for row in result:
+                day = row[0]
+                hours = float(row[2] or 0)
+                days[day] = {
+                    "has_report": True,
+                    "total_hours": hours,
+                    "report_id": row[1]
+                }
+                total_hours += hours
+                report_count += 1
+
+            return {
+                "year": year,
+                "month": month,
+                "days": days,
+                "working_days": working_days,  # 当月工作日数
+                "total_hours": round(total_hours, 1),  # 总工时
+                "report_count": report_count,  # 日报数
+                "missing_days": working_days - report_count  # 缺失天数
+            }
+
+    except Exception as e:
+        logger.exception(f"获取月度日报摘要失败: {e}")
+        return {"year": year, "month": month, "days": {}, "working_days": 0, "total_hours": 0, "report_count": 0, "missing_days": 0}
+
+
+@app.get("/api/agent/daily/by-date")
+async def get_daily_by_date(
+    date: str,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    按日期获取日报详情
+    """
+    try:
+        username = current_user.get("username") or current_user.get("sub")
+        employee_id = current_user.get("employee_id") or username
+
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT dr.id, dr.report_date, dr.status,
+                       to_char(dr.create_time, 'YYYY-MM-DD HH24:MI:SS') as created_at,
+                       COUNT(dwi.id) as item_count,
+                       COALESCE(SUM(dwi.hours_spent), 0) as total_hours
+                FROM daily_reports dr
+                LEFT JOIN daily_work_items dwi ON dwi.report_id = dr.id
+                WHERE dr.employee_id = :eid
+                  AND dr.report_date = :date
+                  AND dr.is_deleted = false
+                GROUP BY dr.id, dr.report_date, dr.status, dr.create_time
+            """), {"eid": employee_id, "date": date})
+
+            row = result.fetchone()
+            if not row:
+                return {"has_report": False}
+
+            report_id = row[0]
+
+            # 获取工作项
+            items_result = conn.execute(text("""
+                SELECT work_content, project_name, start_time, end_time,
+                       hours_spent, task_id, task_name
+                FROM daily_work_items
+                WHERE report_id = :rid
+                ORDER BY project_name, id
+            """), {"rid": report_id})
+
+            items = []
+            for item in items_result:
+                items.append({
+                    "work_content": item[0] or "",
+                    "project_name": item[1] or "",
+                    "start_time": item[2] or "",
+                    "end_time": item[3] or "",
+                    "hours_spent": float(item[4] or 0),
+                    "task_id": item[5],
+                    "task_name": item[6]
+                })
+
+            # 获取原始输入
+            meta_result = conn.execute(text("""
+                SELECT original_input, ai_parsed_data
+                FROM daily_reports
+                WHERE id = :rid
+            """), {"rid": report_id})
+            meta_row = meta_result.fetchone()
+
+            return {
+                "has_report": True,
+                "id": report_id,
+                "report_date": str(row[1]),
+                "total_hours": float(row[5] or 0),
+                "status": row[2] or "已提交",
+                "created_at": row[3],
+                "items": items,
+                "original_input": meta_row[0] if meta_row else None,
+                "ai_parsed_data": meta_row[1] if meta_row and meta_row[1] else None,
+                "ai_parsed": len(items) > 0 and any(item.get("task_id") for item in items)
+            }
+
+    except Exception as e:
+        logger.exception(f"按日期获取日报失败: {e}")
+        return {"has_report": False}
+
 
 @app.post("/api/agent/auth/login")
 @limiter.limit("5/minute")  # 防暴力破解：每分钟最多5次
@@ -2344,6 +2589,843 @@ async def get_team_work_hours(current_user: Dict = Depends(get_current_user)):
             result_list.append(project_data)
 
         return result_list
+
+
+@app.get("/api/agent/stats/monthly-employee-hours")
+async def get_monthly_employee_hours(
+    year: int = None,
+    month: int = None,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取月度人员工时统计
+
+    参数:
+    - year: 年份（默认当前年）
+    - month: 月份（默认当前月）
+
+    返回:
+    - 所有员工在指定月份的工时统计
+    - 按项目分组，显示每个员工在各项目的工时
+    - 包含应填日报数、实填日报数、差异
+    """
+    # 默认当月
+    today = datetime.now().date()
+    year = year or today.year
+    month = month or today.month
+
+    # 计算月份起止日期
+    month_start = datetime(year, month, 1).date()
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    # 计算当月工作日数（排除周末+法定节假日）
+    # 2026年广西法定节假日（特殊处理）：
+    # - 清明：4月4-6日（周六-周一，3天）
+    # - 三月三：4月17日（周五）、4月20日（周一）补休，共4天
+    #   （4月18-19日周六周日本来就是周末）
+    # - 劳动节：5月1-5日，5月9日（周六）补班
+    # - 端午：6月20-22日
+    guangxi_holidays_2026 = {
+        # 清明节
+        (2026, 4, 4), (2026, 4, 5), (2026, 4, 6),
+        # 三月三（调休）
+        (2026, 4, 17), (2026, 4, 20),
+        # 劳动节
+        (2026, 5, 1), (2026, 5, 2), (2026, 5, 3), (2026, 5, 4), (2026, 5, 5),
+        # 端午节
+        (2026, 6, 20), (2026, 6, 21), (2026, 6, 22),
+        # 中秋节
+        (2026, 9, 25), (2026, 9, 26), (2026, 9, 27),
+        # 国庆节
+        (2026, 10, 1), (2026, 10, 2), (2026, 10, 3), (2026, 10, 4),
+        (2026, 10, 5), (2026, 10, 6), (2026, 10, 7), (2026, 10, 8),
+    }
+    
+    # 调休补班日（周末需要上班）
+    guangxi_workdays_2026 = {
+        # 劳动节调休
+        (2026, 5, 9),   # 周六补班
+    }
+    
+    working_days = 0
+    current = month_start
+    while current <= month_end:
+        weekday = current.weekday()  # 0=周一, 6=周日
+        date_tuple = (current.year, current.month, current.day)
+        
+        # 检查是否为工作日
+        if date_tuple in guangxi_workdays_2026:
+            # 调休补班日，算工作日
+            working_days += 1
+        elif date_tuple in guangxi_holidays_2026:
+            # 法定节假日，不算工作日
+            pass
+        elif weekday < 5:  # 周一到周五
+            working_days += 1
+        # 周末不算工作日
+        
+        current += timedelta(days=1)
+
+    with get_connection() as conn:
+        # 查询每个员工实际填写的日报天数（去重）
+        days_result = conn.execute(text("""
+            SELECT 
+                dr.employee_name,
+                COUNT(DISTINCT dr.report_date) as days_filled
+            FROM daily_reports dr
+            WHERE dr.report_date >= :month_start
+              AND dr.report_date <= :month_end
+              AND dr.is_deleted = false
+              AND LOWER(dr.employee_name) != 'admin'
+            GROUP BY dr.employee_name
+        """), {
+            "month_start": month_start,
+            "month_end": month_end
+        })
+        
+        # 员工实际填报天数
+        employee_days = {row[0]: row[1] for row in days_result}
+
+        # 查询所有员工的月度工时（排除admin测试账户）
+        # 使用project_id映射正式项目名，确保口径统一
+        # 只按映射后的项目名分组，避免重复
+        result = conn.execute(text("""
+            SELECT
+                dr.employee_name,
+                COALESCE(p.name, COALESCE(NULLIF(TRIM(dwi.project_name), ''), '其他工作')) as project_name,
+                SUM(dwi.hours_spent) as total_hours,
+                COUNT(DISTINCT dr.id) as report_count
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dr.id = dwi.report_id
+            LEFT JOIN projects p ON p.id::text = dwi.project_id
+            WHERE dr.report_date >= :month_start
+              AND dr.report_date <= :month_end
+              AND dr.is_deleted = false
+              AND LOWER(dr.employee_name) != 'admin'
+            GROUP BY dr.employee_name, COALESCE(p.name, COALESCE(NULLIF(TRIM(dwi.project_name), ''), '其他工作'))
+            ORDER BY dr.employee_name, total_hours DESC
+        """), {
+            "month_start": month_start,
+            "month_end": month_end
+        })
+
+        # 按员工分组
+        employee_hours = {}
+        for row in result:
+            emp_name = row[0]
+            project_name = row[1]
+            hours = float(row[2] or 0)
+            report_count = row[3] or 0
+
+            if emp_name not in employee_hours:
+                employee_hours[emp_name] = {
+                    "employee_name": emp_name,
+                    "projects": [],
+                    "total_hours": 0,
+                    "report_count": 0,
+                    "required_days": working_days,
+                    "filled_days": employee_days.get(emp_name, 0),
+                    "missing_days": working_days - employee_days.get(emp_name, 0)
+                }
+
+            employee_hours[emp_name]["projects"].append({
+                "project_name": project_name,
+                "hours": round(hours, 1)
+            })
+            employee_hours[emp_name]["total_hours"] += hours
+            employee_hours[emp_name]["report_count"] += report_count
+
+        # 转为列表并计算百分比
+        result_list = []
+        total_hours_raw = 0  # 累加原始精度工时
+        for emp_data in employee_hours.values():
+            total = emp_data["total_hours"]
+            for proj in emp_data["projects"]:
+                proj["percent"] = round(100 * proj["hours"] / total, 1) if total > 0 else 0
+            emp_data["total_hours"] = round(total, 1)
+            total_hours_raw += total  # 累加原始精度
+            result_list.append(emp_data)
+
+        # 按总工时排序
+        result_list.sort(key=lambda x: x["total_hours"], reverse=True)
+
+        return {
+            "year": year,
+            "month": month,
+            "month_start": month_start.isoformat(),
+            "month_end": month_end.isoformat(),
+            "working_days": working_days,  # 当月工作日数
+            "employees": result_list,
+            "total_hours": round(total_hours_raw, 1),  # 统一四舍五入
+            "total_reports": sum(e["report_count"] for e in result_list)
+        }
+
+
+def classify_other_work(work_content: str, project_name: str) -> str:
+    """
+    分类基础工作：项目类、行政类、会议类、日常类
+    
+    优先级：
+    1. 项目类：提到具体项目名或项目相关关键词（方案、编制、设计、研发等）
+    2. 行政类：审批、签字、财务、采购等行政事务
+    3. 会议类：会议、早会、培训、评审会等（汇报单独判断）
+    4. 日常类：填报、整理、检查、录入等日常事务
+    """
+    content = (work_content or '') + ' ' + (project_name or '')
+    
+    # 项目类关键词（优先判断）
+    project_keywords = ['项目', '方案编制', '方案设计', '技术方案', '可行性分析', 
+                        '立项', '研发', '调研', '前期', '现场调研', '协调', 
+                        '跟进', '推进', '落实', '编写', '编制', '修改', '完善',
+                        '技术交流', '供应商交流', '设备选型']
+    # 判断是否提到项目名或项目相关工作
+    for kw in project_keywords:
+        if kw in content:
+            # 但如果是汇报会议，归入会议类
+            if '汇报' in content and '会' in content:
+                continue
+            return '项目类'
+    
+    # 行政类关键词
+    admin_keywords = ['审批', '签字', '盖章', '报销', '发票', '合同', 
+                      '采购', '财务', '付款', '资金计划', '招标', '订价',
+                      '流程', '申请', '审核', '质保金', '开票']
+    for kw in admin_keywords:
+        if kw in content:
+            return '行政类'
+    
+    # 会议类关键词（精确匹配，避免误判）
+    meeting_keywords = ['会议', '早会', '晚会', '评审会', '分析会', '讨论会', 
+                        '培训', '参加', '交流会', '立项评审']
+    for kw in meeting_keywords:
+        if kw in content:
+            # 排除：汇报工作内容（不含"会"字）
+            if '汇报' in content and '会' not in content:
+                return '项目类'  # 向领导汇报归入项目类
+            return '会议类'
+    
+    # 日常类关键词
+    daily_keywords = ['检查', '整理', '任务清单', 'KPI', 
+                      '绩效', '督办', '填写', '填报', '台账', '报表',
+                      '录入', '数据', '资料', '电脑', '设备维护',
+                      '安全检查', '隐患', '梳理', '汇总', '统计']
+    for kw in daily_keywords:
+        if kw in content:
+            return '日常类'
+    
+    # 其余归入项目类
+    return '项目类'
+
+
+def extract_category_name(work_content: str) -> str:
+    """
+    从工作内容中智能提取分类名称
+    
+    规则：
+    1. 如果内容明确指向某个项目（如"XXX项目技术方案"），提取项目名
+    2. 如果内容描述具体工作类型（如"会议"、"审核"），提取工作类型
+    3. 如果用户明确写"其他工作"，归为"其他工作"
+    4. 否则，提取关键实体作为分类名
+    """
+    import re
+    
+    work_content = work_content.strip()
+    if not work_content:
+        return "其他工作"
+    
+    # 用户明确提到"其他工作"且无具体内容
+    if work_content == "其他工作" or work_content.lower() == "其他工作":
+        return "其他工作"
+    
+    # 提取项目类关键词（如"XXX项目"、"XXX系统"）
+    project_patterns = [
+        r'([^\s]+项目)[^\s]*',  # XXX项目
+        r'([^\s]+系统)[^\s]*(?:技术方案|设计|研发|调试)',  # XXX系统技术方案
+        r'([^\s]+研发项目)',  # XXX研发项目
+        r'([^\s]+监控系统)',  # XXX监控系统
+        r'([^\s]+控制系统)',  # XXX控制系统
+        r'([^\s]+自动化控制)',  # XXX自动化控制
+    ]
+    
+    for pattern in project_patterns:
+        match = re.search(pattern, work_content)
+        if match:
+            category = match.group(1).strip()
+            # 清理前缀词（如"前往"、"编写"等）
+            category = re.sub(r'^前往|^编写|^完成|^开展|^参加|^在|^到', '', category).strip()
+            return category
+    
+    # 提取地点+设备类（如"田阳新材料熔炼炉"）
+    location_device_pattern = r'(田阳|隆林|德保|田林|靖锰|精铝)[^\s]*(?:熔炼炉|铝厂|车间|新材料)[^\s]*(?:激光测距仪|在线监测|设备调试)'
+    match = re.search(location_device_pattern, work_content)
+    if match:
+        return match.group(0).strip()
+    
+    # 提取工作类型关键词
+    work_type_keywords = {
+        '会议': ['会议', '早会', '晚会', '评审会', '讨论会', '立项评审会', '审查会', '培训', '学习', '交流', '调研'],
+        '行政审批': ['审核', '盖章', '签字', '审批', '提交', '督办', '流程', 'KPI', '绩效', '任务清单', '关键任务'],
+        '采购财务': ['采购', '付款', '报销', '发票', '合同', '订价', '招标', '物资', '材料', '财务'],
+        '安全检查': ['安全检查', '实验室安全', '隐患', '消防', '安全培训'],
+        '设备调试': ['调试', '安装', '维修', '维护', '检修', '故障处理', '设备检查'],
+        '技术方案': ['技术方案', '设计方案', '立项报告', '可行性分析', '成本分析', '试验方案'],
+    }
+    
+    for work_type, keywords in work_type_keywords.items():
+        for kw in keywords:
+            if kw in work_content:
+                # 如果找到了具体的项目/地点，结合显示
+                location_match = re.search(r'(田阳|隆林|德保|田林|靖锰|精铝|新材料)', work_content)
+                if location_match:
+                    return f"{location_match.group(1)}{work_type}"
+                return work_type
+    
+    # 提取地点/车间关键词
+    location_patterns = [
+        r'(田阳新材料[^\s]*)',
+        r'(精铝车间)',
+        r'(田阳铝厂)',
+        r'(隆林铝厂)',
+        r'(德保铝厂)',
+        r'(田林铝厂)',
+        r'(靖锰公司)',
+    ]
+    
+    for pattern in location_patterns:
+        match = re.search(pattern, work_content)
+        if match:
+            return match.group(1).strip()
+    
+    # 最后：使用工作内容的前30个字符作为分类名（去掉动词前缀）
+    short_content = work_content[:50]
+    short_content = re.sub(r'^前往|^编写|^完成|^开展|^参加|^在|^到|^根据|^整理|^处理|^制作|^核对|^重新|^提交|^出差', '', short_content).strip()
+    return short_content if short_content else "其他工作"
+
+
+@app.get("/api/agent/stats/monthly-project-hours")
+async def get_monthly_project_hours(
+    year: int = None,
+    month: int = None,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取月度项目工时统计（项目维度）
+    
+    判断逻辑：
+    1. project_id有值 → 通过project_id匹配正式项目
+    2. project_id为空 → project_name精确匹配正式项目表
+    3. 都匹配不上 → 归类为其他工作
+    """
+    today = datetime.now().date()
+    year = year or today.year
+    month = month or today.month
+
+    month_start = datetime(year, month, 1).date()
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    with get_connection() as conn:
+        # 获取正式项目的ID->名称映射
+        official_projects_result = conn.execute(text("""
+            SELECT id::text, name FROM projects 
+            WHERE is_deleted = false 
+            ORDER BY name
+        """))
+        project_id_to_name = {row[0]: row[1] for row in official_projects_result}
+        project_name_to_id = {row[1]: row[0] for row in official_projects_result}
+        
+        # 查询正式项目的工时数据
+        official_result = conn.execute(text("""
+            SELECT 
+                dwi.project_id,
+                p.name as project_name,
+                dr.employee_name,
+                SUM(dwi.hours_spent) as total_hours
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dr.id = dwi.report_id
+            JOIN projects p ON p.id::text = dwi.project_id
+            WHERE dr.report_date >= :month_start
+              AND dr.report_date <= :month_end
+              AND dr.is_deleted = false
+              AND LOWER(dr.employee_name) != 'admin'
+              AND dwi.project_id IS NOT NULL AND dwi.project_id != ''
+            GROUP BY dwi.project_id, p.name, dr.employee_name
+            ORDER BY p.name, total_hours DESC
+        """), {
+            "month_start": month_start,
+            "month_end": month_end
+        })
+        
+        # 查询未匹配项目的工时数据
+        other_result = conn.execute(text("""
+            SELECT 
+                dwi.project_name,
+                dwi.work_content,
+                dr.employee_name,
+                SUM(dwi.hours_spent) as total_hours
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dr.id = dwi.report_id
+            WHERE dr.report_date >= :month_start
+              AND dr.report_date <= :month_end
+              AND dr.is_deleted = false
+              AND LOWER(dr.employee_name) != 'admin'
+              AND (dwi.project_id IS NULL OR dwi.project_id = '')
+            GROUP BY dwi.project_name, dwi.work_content, dr.employee_name
+            ORDER BY total_hours DESC
+        """), {
+            "month_start": month_start,
+            "month_end": month_end
+        })
+
+        # 分类：正式项目 vs 其他工作（通过project_id判断）
+        official_project_hours = {}
+        other_work_hours = {}
+        all_employees = set()
+        
+        # 处理正式项目数据
+        for row in official_result:
+            project_id = row[0]
+            project_name = row[1]
+            emp_name = row[2]
+            hours = float(row[3] or 0)
+            
+            all_employees.add(emp_name)
+            
+            if project_name not in official_project_hours:
+                official_project_hours[project_name] = {
+                    "project_name": project_name,
+                    "members": {},
+                    "total_hours": 0
+                }
+            
+            official_project_hours[project_name]["members"][emp_name] = official_project_hours[project_name]["members"].get(emp_name, 0) + hours
+            official_project_hours[project_name]["total_hours"] += hours
+        
+        # 处理未匹配项目数据 - 按四类分类
+        for row in other_result:
+            project_name_from_db = row[0] or ""
+            work_content_from_db = row[1] or ""
+            emp_name = row[2]
+            hours = float(row[3] or 0)
+            
+            all_employees.add(emp_name)
+            
+            # 使用新的分类函数
+            category_name = classify_other_work(work_content_from_db, project_name_from_db)
+            
+            if category_name not in other_work_hours:
+                other_work_hours[category_name] = {
+                    "project_name": category_name,
+                    "members": {},
+                    "total_hours": 0
+                }
+            
+            other_work_hours[category_name]["members"][emp_name] = other_work_hours[category_name]["members"].get(emp_name, 0) + hours
+            other_work_hours[category_name]["total_hours"] += hours
+
+        # 转为列表并排序
+        official_list = []
+        official_employee_totals: Dict[str, float] = {}
+        official_employee_totals_raw: Dict[str, float] = {}  # 原始精度
+        
+        for proj_data in official_project_hours.values():
+            # 累加原始精度工时到员工汇总
+            for emp, hours in proj_data["members"].items():
+                official_employee_totals_raw[emp] = official_employee_totals_raw.get(emp, 0) + hours
+            # 显示时四舍五入
+            proj_data["total_hours"] = round(proj_data["total_hours"], 1)
+            proj_data["members"] = {k: round(v, 1) for k, v in proj_data["members"].items()}
+            official_list.append(proj_data)
+        
+        official_list.sort(key=lambda x: x["total_hours"], reverse=True)
+        # 统一四舍五入
+        official_employee_totals = {k: round(v, 1) for k, v in sorted(official_employee_totals_raw.items(), key=lambda x: x[1], reverse=True)}
+        official_grand_total = round(sum(official_employee_totals_raw.values()), 1)
+        
+        # 其他工作列表
+        other_list = []
+        other_employee_totals: Dict[str, float] = {}
+        other_employee_totals_raw: Dict[str, float] = {}  # 原始精度
+        
+        for proj_data in other_work_hours.values():
+            # 累加原始精度工时到员工汇总
+            for emp, hours in proj_data["members"].items():
+                other_employee_totals_raw[emp] = other_employee_totals_raw.get(emp, 0) + hours
+            # 显示时四舍五入
+            proj_data["total_hours"] = round(proj_data["total_hours"], 1)
+            proj_data["members"] = {k: round(v, 1) for k, v in proj_data["members"].items()}
+            other_list.append(proj_data)
+        
+        other_list.sort(key=lambda x: {
+            "项目类": 0,
+            "行政类": 1,
+            "会议类": 2,
+            "日常类": 3
+        }.get(x["project_name"], 4))
+        # 统一四舍五入
+        other_employee_totals = {k: round(v, 1) for k, v in sorted(other_employee_totals_raw.items(), key=lambda x: x[1], reverse=True)}
+        other_grand_total = round(sum(other_employee_totals_raw.values()), 1)
+        
+        # 全部员工列表（合并两部分）
+        all_employee_totals: Dict[str, float] = {}
+        for emp, hours in official_employee_totals_raw.items():
+            all_employee_totals[emp] = hours
+        for emp, hours in other_employee_totals_raw.items():
+            all_employee_totals[emp] = all_employee_totals.get(emp, 0) + hours
+        all_employee_totals = {k: round(v, 1) for k, v in sorted(all_employee_totals.items(), key=lambda x: x[1], reverse=True)}
+        
+        grand_total = round(sum(official_employee_totals_raw.values()) + sum(other_employee_totals_raw.values()), 1)
+
+        return {
+            "year": year,
+            "month": month,
+            "official_projects": official_list,
+            "official_employee_totals": official_employee_totals,
+            "official_grand_total": official_grand_total,
+            "other_works": other_list,
+            "other_employee_totals": other_employee_totals,
+            "other_grand_total": other_grand_total,
+            "all_employees": list(all_employee_totals.keys()),
+            "all_employee_totals": all_employee_totals,
+            "grand_total": grand_total,
+            "official_project_count": len(official_list),
+            "other_work_count": len(other_list)
+        }
+
+
+@app.get("/api/agent/stats/project-employee-details")
+async def get_project_employee_details(
+    project_name: str,
+    employee_name: str,
+    year: int,
+    month: int,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取指定项目、人员、月份的日报详情列表
+    
+    project_name 可能是：
+    - 正式项目名
+    - 基础工作分类：会议类、行政类、日常类、项目类
+    """
+    from urllib.parse import unquote
+    
+    project_name = unquote(project_name)
+    employee_name = unquote(employee_name)
+    
+    month_start = datetime(year, month, 1).date()
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    
+    with get_connection() as conn:
+        # 判断是基础工作分类还是正式项目
+        basic_categories = ['会议类', '行政类', '日常类', '项目类']
+        
+        if project_name in basic_categories:
+            # 基础工作分类：查询所有未匹配项目的日报，再按分类过滤
+            result = conn.execute(text("""
+                SELECT 
+                    dr.report_date,
+                    dwi.project_name,
+                    dwi.work_content,
+                    dwi.hours_spent,
+                    dwi.start_time,
+                    dwi.end_time
+                FROM daily_work_items dwi
+                JOIN daily_reports dr ON dr.id = dwi.report_id
+                JOIN personnel p ON dr.employee_id = p.employee_id
+                WHERE p.name = :emp_name
+                  AND dr.report_date >= :month_start
+                  AND dr.report_date <= :month_end
+                  AND dr.is_deleted = false
+                  AND dwi.is_deleted = false
+                  AND (dwi.project_id IS NULL OR dwi.project_id = '')
+                ORDER BY dr.report_date DESC
+            """), {
+                "emp_name": employee_name,
+                "month_start": month_start,
+                "month_end": month_end
+            })
+            
+            # 在 Python 中过滤分类
+            details = []
+            total_hours = 0
+            for row in result:
+                work_content = row[2] or ""
+                proj_name = row[1] or ""
+                # 使用分类函数判断
+                if classify_other_work(work_content, proj_name) == project_name:
+                    details.append({
+                        "date": str(row[0]),
+                        "project": row[1] or "基础工作",
+                        "content": row[2],
+                        "hours": float(row[3] or 0),
+                        "time_range": f"{row[4] or ''}-{row[5] or ''}" if row[4] and row[5] else ""
+                    })
+                    total_hours += float(row[3] or 0)
+        else:
+            # 正式项目：按 project_name 匹配
+            result = conn.execute(text("""
+                SELECT 
+                    dr.report_date,
+                    dwi.project_name,
+                    dwi.work_content,
+                    dwi.hours_spent,
+                    dwi.start_time,
+                    dwi.end_time
+                FROM daily_work_items dwi
+                JOIN daily_reports dr ON dr.id = dwi.report_id
+                JOIN personnel p ON dr.employee_id = p.employee_id
+                WHERE p.name = :emp_name
+                  AND dr.report_date >= :month_start
+                  AND dr.report_date <= :month_end
+                  AND dr.is_deleted = false
+                  AND dwi.is_deleted = false
+                  AND dwi.project_name = :project_name
+                ORDER BY dr.report_date DESC
+            """), {
+                "emp_name": employee_name,
+                "project_name": project_name,
+                "month_start": month_start,
+                "month_end": month_end
+            })
+            
+            details = []
+            total_hours = 0
+            for row in result:
+                details.append({
+                    "date": str(row[0]),
+                    "project": row[1],
+                    "content": row[2],
+                    "hours": float(row[3] or 0),
+                    "time_range": f"{row[4] or ''}-{row[5] or ''}" if row[4] and row[5] else ""
+                })
+                total_hours += float(row[3] or 0)
+        
+        return {
+            "project_name": project_name,
+            "employee_name": employee_name,
+            "year": year,
+            "month": month,
+            "details": details,
+            "total_hours": round(total_hours, 2),
+            "count": len(details)
+        }
+
+
+
+@app.get("/api/agent/stats/monthly-employee-hours/export")
+async def export_monthly_employee_hours(
+    year: int = None,
+    month: int = None,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    导出月度人员工时统计为Excel（包含人员维度和项目维度两个sheet）
+    """
+    from fastapi.responses import StreamingResponse
+    import io
+    import pandas as pd
+    from urllib.parse import quote
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+    # 调用统计API获取数据
+    employee_data = await get_monthly_employee_hours(year, month, current_user)
+    project_data = await get_monthly_project_hours(year, month, current_user)
+
+    output = io.BytesIO()
+    
+    # 样式定义
+    header_font = Font(bold=True, size=12, color='FFFFFF')
+    header_fill = PatternFill(start_color='3B82F6', end_color='3B82F6', fill_type='solid')
+    header_alignment = Alignment(horizontal='center', vertical='center')
+    
+    subtotal_fill = PatternFill(start_color='DBEAFE', end_color='DBEAFE', fill_type='solid')
+    subtotal_font = Font(bold=True)
+    
+    other_subtotal_fill = PatternFill(start_color='FEF9C3', end_color='FEF9C3', fill_type='solid')
+    other_subtotal_font = Font(bold=True, color='D97706')
+    
+    grand_total_fill = PatternFill(start_color='E0E7FF', end_color='E0E7FF', fill_type='solid')
+    grand_total_font = Font(bold=True, size=12, color='6366F1')
+    
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Sheet1: 人员维度汇总
+        summary_rows = []
+        for emp in employee_data["employees"]:
+            if emp["employee_name"].lower() == "admin":
+                continue
+            summary_rows.append({
+                "员工姓名": emp["employee_name"],
+                "应填日报": emp["required_days"],
+                "实填日报": emp["filled_days"],
+                "缺失": emp["missing_days"],
+                "总工时(h)": emp["total_hours"],
+                "填报率(%)": round(100 * emp["filled_days"] / emp["required_days"], 1) if emp["required_days"] > 0 else 0
+            })
+        
+        summary_sheet = f'{employee_data["year"]}年{employee_data["month"]}月人员汇总'
+        pd.DataFrame(summary_rows).to_excel(writer, index=False, sheet_name=summary_sheet)
+        ws1 = writer.sheets[summary_sheet]
+        
+        # 设置列宽
+        ws1.column_dimensions['A'].width = 12
+        ws1.column_dimensions['B'].width = 10
+        ws1.column_dimensions['C'].width = 10
+        ws1.column_dimensions['D'].width = 8
+        ws1.column_dimensions['E'].width = 12
+        ws1.column_dimensions['F'].width = 12
+        
+        # 应用表头样式
+        for cell in ws1[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        
+        # 应用数据行样式
+        for row in ws1.iter_rows(min_row=2, max_row=ws1.max_row, min_col=1, max_col=6):
+            for cell in row:
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+        
+        # Sheet2: 项目维度
+        official_rows = []
+        for proj in project_data["official_projects"]:
+            row_data = {"项目名称": proj["project_name"]}
+            for emp in project_data["all_employees"]:
+                row_data[emp] = proj["members"].get(emp, "")
+            row_data["项目小计"] = proj["total_hours"]
+            official_rows.append(row_data)
+        
+        # 正式项目小计行
+        official_subtotal = {"项目名称": "【正式项目小计】"}
+        for emp in project_data["all_employees"]:
+            official_subtotal[emp] = project_data["official_employee_totals"].get(emp, "")
+        official_subtotal["项目小计"] = project_data["official_grand_total"]
+        official_rows.append(official_subtotal)
+        
+        # 空行分隔
+        official_rows.append({"项目名称": ""})
+        
+        # 其他工作
+        other_rows = []
+        for proj in project_data["other_works"]:
+            row_data = {"项目名称": proj["project_name"]}
+            for emp in project_data["all_employees"]:
+                row_data[emp] = proj["members"].get(emp, "")
+            row_data["项目小计"] = proj["total_hours"]
+            other_rows.append(row_data)
+        
+        # 其他工作小计行
+        other_subtotal = {"项目名称": "【其他工作小计】"}
+        for emp in project_data["all_employees"]:
+            other_subtotal[emp] = project_data["other_employee_totals"].get(emp, "")
+        other_subtotal["项目小计"] = project_data["other_grand_total"]
+        other_rows.append(other_subtotal)
+        
+        # 合并两部分
+        all_project_rows = official_rows + other_rows
+        
+        # 总计行
+        grand_total_row = {"项目名称": "【总计】"}
+        for emp in project_data["all_employees"]:
+            grand_total_row[emp] = project_data["all_employee_totals"].get(emp, "")
+        grand_total_row["项目小计"] = project_data["grand_total"]
+        all_project_rows.append(grand_total_row)
+        
+        project_sheet = f'{project_data["year"]}年{project_data["month"]}月项目维度'
+        pd.DataFrame(all_project_rows).to_excel(writer, index=False, sheet_name=project_sheet)
+        ws2 = writer.sheets[project_sheet]
+        
+        # 设置列宽
+        ws2.column_dimensions['A'].width = 30
+        for i, emp in enumerate(project_data["all_employees"]):
+            col_letter = chr(66 + i)  # B, C, D...
+            ws2.column_dimensions[col_letter].width = 10
+        last_col = chr(66 + len(project_data["all_employees"]))
+        ws2.column_dimensions[last_col].width = 12
+        
+        # 应用表头样式
+        for cell in ws2[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_alignment
+            cell.border = thin_border
+        
+        # 应用数据行样式
+        subtotal_row_num = len(project_data["official_projects"]) + 2
+        other_subtotal_row_num = subtotal_row_num + 1 + len(project_data["other_works"]) + 1
+        grand_total_row_num = other_subtotal_row_num + 1
+        
+        for row_num, row in enumerate(ws2.iter_rows(min_row=2, max_row=ws2.max_row, min_col=1, max_col=len(project_data["all_employees"])+2), start=2):
+            for cell in row:
+                cell.border = thin_border
+                cell.alignment = Alignment(horizontal='center' if cell.column > 1 else 'left', vertical='center')
+            
+            # 小计行样式
+            if row_num == subtotal_row_num:
+                for cell in row:
+                    cell.fill = subtotal_fill
+                    cell.font = subtotal_font
+            elif row_num == other_subtotal_row_num:
+                for cell in row:
+                    cell.fill = other_subtotal_fill
+                    cell.font = other_subtotal_font
+            elif row_num == grand_total_row_num:
+                for cell in row:
+                    cell.fill = grand_total_fill
+                    cell.font = grand_total_font
+
+    output.seek(0)
+    
+    filename = f'月度工时统计_{employee_data["year"]}年{employee_data["month"]}月.xlsx'
+    encoded_filename = quote(filename)
+    return StreamingResponse(
+        output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
+
+    # 导出到Excel（两个sheet）
+    output = io.BytesIO()
+    summary_sheet = f'{data["year"]}年{data["month"]}月汇总'
+    detail_sheet = f'{data["year"]}年{data["month"]}月明细'
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # 汇总表
+        pd.DataFrame(summary_rows).to_excel(writer, index=False, sheet_name=summary_sheet)
+        ws_summary = writer.sheets[summary_sheet]
+        ws_summary.column_dimensions['A'].width = 12
+        ws_summary.column_dimensions['B'].width = 10
+        ws_summary.column_dimensions['C'].width = 10
+        ws_summary.column_dimensions['D'].width = 8
+        ws_summary.column_dimensions['E'].width = 12
+        ws_summary.column_dimensions['F'].width = 12
+        
+        # 明细表
+        pd.DataFrame(detail_rows).to_excel(writer, index=False, sheet_name=detail_sheet)
+        ws_detail = writer.sheets[detail_sheet]
+        ws_detail.column_dimensions['A'].width = 12
+        ws_detail.column_dimensions['B'].width = 30
+        ws_detail.column_dimensions['C'].width = 12
+        ws_detail.column_dimensions['D'].width = 10
+
+    output.seek(0)
+
+    # 返回文件流（URL编码文件名）
+    filename = f'月度工时统计_{data["year"]}年{data["month"]}月.xlsx'
+    encoded_filename = quote(filename)
+    return StreamingResponse(
+        output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
 
 
 # ============== Phase 14: 数据可视化 API ==============
@@ -3326,41 +4408,56 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
         if role_id == 11:  # 管理员
             logger.debug(f"管理员用户 {employee_name}，返回所有项目")
             result = conn.execute(text("""
-                SELECT id, name, leader, status FROM projects
-                WHERE is_deleted = false ORDER BY id
+                SELECT id, name, leader, status, project_year FROM projects
+                WHERE is_deleted = false ORDER BY project_year DESC, id
             """))
         else:
             logger.debug(f"普通用户 {employee_name}，查询负责的项目")
             result = conn.execute(text("""
-                SELECT id, name, leader, status FROM projects
+                SELECT id, name, leader, status, project_year FROM projects
                 WHERE is_deleted = false AND leader = :emp_name
-                ORDER BY id
+                ORDER BY project_year DESC, id
             """), {"emp_name": employee_name})
         
-        # 计算每个项目的进度
+        # 计算每个项目的进度（工期加权，与详情页和看板统一）
         projects = []
         for row in result:
             project_id = row[0]
             try:
+                # 只统计叶子任务，使用工期加权计算
                 task_stats = conn.execute(text("""
                     SELECT
                         COUNT(*) as total_tasks,
                         SUM(CASE WHEN progress >= 100 THEN 1 ELSE 0 END) as completed_tasks,
-                        AVG(progress) as avg_progress
+                        -- 总工期天数
+                        SUM(CASE WHEN end_date IS NOT NULL AND start_date IS NOT NULL 
+                            THEN end_date - start_date + 1 ELSE 5 END) as total_work_days,
+                        -- 已完成工期天数
+                        SUM(CASE 
+                            WHEN progress >= 100 AND end_date IS NOT NULL AND start_date IS NOT NULL 
+                            THEN end_date - start_date + 1 
+                            WHEN end_date IS NOT NULL AND start_date IS NOT NULL AND end_date < CURRENT_DATE
+                            THEN (end_date - start_date + 1) * LEAST(progress / 100.0, 0.5)
+                            WHEN end_date IS NOT NULL AND start_date IS NOT NULL
+                            THEN (end_date - start_date + 1) * progress / 100.0
+                            ELSE 0 
+                        END) as completed_work_days
                     FROM project_tasks
                     WHERE project_id = CAST(:pid AS VARCHAR)
                       AND is_deleted = false
                       AND is_latest = true
+                      AND ("isNode" = false OR "isNode" IS NULL)
                 """), {"pid": project_id})
                 ts = task_stats.fetchone()
                 
                 total_tasks = int(ts[0] or 0)
                 completed_tasks = int(ts[1] or 0)
-                avg_progress = float(ts[2] or 0)
+                total_work_days = float(ts[2] or 0)
+                completed_work_days = float(ts[3] or 0)
                 
-                # 进度 = (完成任务数/总任务数 * 100 + 平均进度) / 2
-                if total_tasks > 0:
-                    progress = round((completed_tasks / total_tasks * 100 + avg_progress) / 2, 1)
+                # 进度 = 已完成工期天数 / 总工期天数
+                if total_work_days > 0:
+                    progress = round(completed_work_days / total_work_days * 100, 1)
                 else:
                     progress = 0
                 
@@ -3369,7 +4466,8 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
                     "name": row[1],
                     "leader": row[2],
                     "status": row[3],
-                    "progress": progress
+                    "progress": progress,
+                    "project_year": row[4] if len(row) > 4 else None
                 })
             except Exception as e:
                 logger.warning(f"计算项目进度失败: {e}")
@@ -3378,7 +4476,8 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
                     "name": row[1],
                     "leader": row[2],
                     "status": row[3],
-                    "progress": 0
+                    "progress": 0,
+                    "project_year": row[4] if len(row) > 4 else None
                 })
         
         logger.debug(f"返回项目数: {len(projects)}")
@@ -3424,7 +4523,7 @@ async def get_project_detail(
             if not project_row:
                 raise HTTPException(status_code=404, detail="项目不存在")
 
-            # 获取最新版本任务的时间范围和进度
+            # 获取最新版本叶子任务的时间范围和进度（排除分组父节点）
             task_stats = conn.execute(text("""
                 WITH latest_version AS (
                     SELECT MAX(CAST(SUBSTRING(task_id FROM 'V([0-9]+)') AS INTEGER)) as max_ver
@@ -3435,24 +4534,38 @@ async def get_project_detail(
                     MIN(start_date) as plan_start,
                     MAX(end_date) as plan_end,
                     COUNT(*) as total_tasks,
-                    SUM(CASE WHEN status = '已完成' THEN 1 ELSE 0 END) as completed_tasks,
-                    AVG(progress) as avg_progress
+                    SUM(CASE WHEN progress >= 100 THEN 1 ELSE 0 END) as completed_tasks,
+                    AVG(progress) as avg_progress,
+                    -- 计算总工期天数
+                    SUM(CASE WHEN end_date IS NOT NULL AND start_date IS NOT NULL 
+                        THEN end_date - start_date + 1 ELSE 5 END) as total_work_days,
+                    -- 计算已完成工期天数
+                    SUM(CASE 
+                        WHEN progress >= 100 AND end_date IS NOT NULL AND start_date IS NOT NULL 
+                        THEN end_date - start_date + 1 
+                        WHEN end_date IS NOT NULL AND start_date IS NOT NULL AND end_date < CURRENT_DATE
+                        THEN (end_date - start_date + 1) * LEAST(progress / 100.0, 0.5)
+                        WHEN end_date IS NOT NULL AND start_date IS NOT NULL
+                        THEN (end_date - start_date + 1) * progress / 100.0
+                        ELSE 0 
+                    END) as completed_work_days
                 FROM project_tasks pt, latest_version lv
                 WHERE pt.project_id::integer = :pid
                   AND pt.is_deleted = false
+                  AND (pt."isNode" = false OR pt."isNode" IS NULL)
                   AND COALESCE(CAST(SUBSTRING(pt.task_id FROM 'V([0-9]+)') AS INTEGER), 0) = COALESCE(lv.max_ver, 0)
             """), {"pid": project_id})
 
             task_row = task_stats.fetchone()
 
-            # 计算项目进度
+            # 计算项目进度（按工期加权，与看板统一）
             total_tasks = task_row[2] or 0
             completed_tasks = task_row[3] or 0
-            avg_progress = float(task_row[4] or 0)
-
-            # 进度计算：已完成任务占比 + 平均进度占比
-            if total_tasks > 0:
-                project_progress = (completed_tasks / total_tasks * 100 + avg_progress) / 2
+            total_work_days = float(task_row[5] or 0)
+            completed_work_days = float(task_row[6] or 0)
+            
+            if total_work_days > 0:
+                project_progress = completed_work_days / total_work_days * 100
             else:
                 project_progress = 0
 
@@ -3532,7 +4645,7 @@ async def get_project_detail(
             "plan_start_date": str(task_row[0]) if task_row[0] else None,
             "plan_end_date": str(task_row[1]) if task_row[1] else None,
             "progress": round(project_progress, 1),
-            "progress_formula": f"({completed_tasks}/{total_tasks}×100 + {round(avg_progress, 1)})÷2 = {round(project_progress, 1)}%",
+            "progress_formula": f"工期加权: {completed_work_days:.0f}/{total_work_days:.0f}天 = {round(project_progress, 1)}%",
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "total_hours": round(total_hours, 1),
@@ -3577,6 +4690,8 @@ async def get_project_tasks(
         result = conn.execute(text("""
             SELECT pt.task_id, pt.task_name, pt.assignee, pt.start_date, pt.end_date,
                    pt.status, pt.progress, pt.planned_hours,
+                   pt.parent_task_id, pt.task_level, pt.actual_end_date,
+                   pt."isNode", pt.leaf_node,
                    COALESCE(
                        json_agg(
                            json_build_object(
@@ -3595,8 +4710,10 @@ async def get_project_tasks(
               AND pt.is_deleted = false
               AND CAST(SUBSTRING(pt.task_id FROM 'V([0-9]+)') AS INTEGER) = :max_version
             GROUP BY pt.task_id, pt.task_name, pt.assignee, pt.start_date, pt.end_date,
-                     pt.status, pt.progress, pt.planned_hours
-            ORDER BY pt.end_date NULLS LAST
+                     pt.status, pt.progress, pt.planned_hours,
+                     pt.parent_task_id, pt.task_level, pt.actual_end_date,
+                     pt."isNode", pt.leaf_node
+            ORDER BY pt.task_id
         """), {"pid": project_id, "max_version": max_version})
 
         tasks = []
@@ -3610,7 +4727,12 @@ async def get_project_tasks(
                 "status": row[5] or "未开始",
                 "progress": float(row[6] or 0),
                 "planned_hours": float(row[7] or 0),
-                "daily_reports": row[8] if row[8] else []
+                "parent_task_id": row[8],
+                "task_level": row[9],
+                "actual_end_date": str(row[10]) if row[10] else None,
+                "is_node": row[11],
+                "leaf_node": row[12],
+                "daily_reports": row[13] if row[13] else []
             })
 
         return tasks
@@ -6454,7 +7576,7 @@ async def get_dashboard_projects_api(
             for p in projects:
                 project_id = p[0]
                 
-                # 获取项目的最新版本任务（用于计算进度）
+                # 获取项目的最新版本叶子任务（用于计算进度，排除分组父节点）
                 tasks = conn.execute(text("""
                     SELECT 
                         task_id, task_name, start_date, end_date, 
@@ -6464,6 +7586,7 @@ async def get_dashboard_projects_api(
                     AND is_latest = true
                     AND is_deleted = false
                     AND end_date IS NOT NULL
+                    AND ("isNode" = false OR "isNode" IS NULL)
                     ORDER BY end_date DESC
                 """), {"pid": str(project_id)}).fetchall()
                 
@@ -6512,19 +7635,20 @@ async def get_dashboard_projects_api(
                     for t in tasks:
                         task_start = t[2]  # start_date
                         task_end = t[3]    # end_date
+                        actual_end = t[4]  # actual_end_date
                         task_progress = float(t[5] or 0) / 100
                         
-                        # 计算任务工期（天）
+                        # 计算任务工期（天）- 含首尾日，与详情页统一
                         if task_start and task_end:
                             start_dt = task_start if isinstance(task_start, type(today)) else datetime.strptime(str(task_start), '%Y-%m-%d').date()
                             end_dt = task_end if isinstance(task_end, type(today)) else datetime.strptime(str(task_end), '%Y-%m-%d').date()
-                            work_days = max((end_dt - start_dt).days, 1)  # 至少1天
+                            work_days = max((end_dt - start_dt).days + 1, 1)  # 含首日，至少1天
                         else:
                             work_days = 5  # 默认5天
                         
                         total_work_days += work_days
                         
-                        if task_progress >= 1.0:
+                        if task_progress >= 1.0 or actual_end:
                             # 已完成：计入完整工期
                             completed_work_days += work_days
                         elif task_end and task_end < today:

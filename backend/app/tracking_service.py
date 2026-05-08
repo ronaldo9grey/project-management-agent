@@ -45,17 +45,22 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
     month_end = date(today.year, today.month + 1, 1) - timedelta(days=1) if today.month < 12 else date(today.year + 1, 1, 1) - timedelta(days=1)
     
     with engine.connect() as conn:
-        # 1. 总任务数统计（按状态分类）
+        # 1. 总任务数统计（动态计算状态）
+        # - 已完成：progress >= 100
+        # - 进行中：0 < progress < 100
+        # - 未开始：progress = 0 且 (start_date 为空 或 start_date > 今天)
+        # - 延期：end_date < 今天 且 progress < 100
         total_stats = conn.execute(text("""
             SELECT 
                 COUNT(*) as total,
-                COUNT(CASE WHEN status = '未开始' THEN 1 END) as pending,
-                COUNT(CASE WHEN status = '进行中' THEN 1 END) as ongoing,
-                COUNT(CASE WHEN status = '延期' THEN 1 END) as delayed,
-                COUNT(CASE WHEN status = '已完成' THEN 1 END) as completed
+                COUNT(CASE WHEN (progress = 0 OR progress IS NULL) 
+                           AND (start_date IS NULL OR start_date > :today) THEN 1 END) as pending,
+                COUNT(CASE WHEN progress > 0 AND progress < 100 THEN 1 END) as ongoing,
+                COUNT(CASE WHEN end_date < :today AND (progress < 100 OR progress IS NULL) THEN 1 END) as delayed,
+                COUNT(CASE WHEN progress >= 100 THEN 1 END) as completed
             FROM project_tasks
             WHERE is_deleted = false AND is_latest = true
-        """)).fetchone()
+        """), {"today": today.isoformat()}).fetchone()
         
         total_tasks = total_stats[0] or 0
         status_pending = total_stats[1] or 0
@@ -63,9 +68,10 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
         status_delayed = total_stats[3] or 0
         status_completed = total_stats[4] or 0
         
-        # 2. 查询待办任务（不限状态，按截止日期分类）
-        # 只看有截止日期的任务
-        tasks_query = """
+        # 2. 分类查询待办任务（每个分类单独查询，避免 LIMIT 影响其他分类）
+        
+        # 2.1 今日截止
+        today_query = """
             SELECT 
                 pt.task_id, pt.task_name, pt.progress, pt.status,
                 pt.start_date, pt.end_date, pt.assignee,
@@ -74,46 +80,112 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
             JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
             WHERE pt.is_deleted = false 
               AND pt.is_latest = true
-              AND pt.end_date IS NOT NULL
+              AND pt.end_date = :today
+              AND (pt.progress < 100 OR pt.progress IS NULL)
+              AND p.is_deleted = false
+            ORDER BY pt.progress ASC
+            LIMIT 20
+        """
+        today_tasks = [{
+            "task_id": t[0],
+            "task_name": t[1],
+            "progress": float(t[2] or 0),
+            "status": t[3],
+            "start_date": str(t[4]) if t[4] else None,
+            "end_date": str(t[5]) if t[5] else None,
+            "assignee": t[6],
+            "project_name": t[7],
+            "project_id": t[8]
+        } for t in conn.execute(text(today_query), {"today": today.isoformat()}).fetchall()]
+        
+        # 2.2 本周截止（不含今天）
+        week_query = """
+            SELECT 
+                pt.task_id, pt.task_name, pt.progress, pt.status,
+                pt.start_date, pt.end_date, pt.assignee,
+                p.name as project_name, p.id as project_id
+            FROM project_tasks pt
+            JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
+            WHERE pt.is_deleted = false 
+              AND pt.is_latest = true
+              AND pt.end_date > :today
+              AND pt.end_date <= :week_end
+              AND (pt.progress < 100 OR pt.progress IS NULL)
               AND p.is_deleted = false
             ORDER BY pt.end_date ASC, pt.progress ASC
+            LIMIT 30
+        """
+        week_tasks = [{
+            "task_id": t[0],
+            "task_name": t[1],
+            "progress": float(t[2] or 0),
+            "status": t[3],
+            "start_date": str(t[4]) if t[4] else None,
+            "end_date": str(t[5]) if t[5] else None,
+            "assignee": t[6],
+            "project_name": t[7],
+            "project_id": t[8]
+        } for t in conn.execute(text(week_query), {"today": today.isoformat(), "week_end": week_end.isoformat()}).fetchall()]
+        
+        # 2.3 本月截止（不含本周）
+        month_query = """
+            SELECT 
+                pt.task_id, pt.task_name, pt.progress, pt.status,
+                pt.start_date, pt.end_date, pt.assignee,
+                p.name as project_name, p.id as project_id
+            FROM project_tasks pt
+            JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
+            WHERE pt.is_deleted = false 
+              AND pt.is_latest = true
+              AND pt.end_date > :week_end
+              AND pt.end_date <= :month_end
+              AND (pt.progress < 100 OR pt.progress IS NULL)
+              AND p.is_deleted = false
+            ORDER BY pt.end_date ASC, pt.progress ASC
+            LIMIT 30
+        """
+        month_tasks = [{
+            "task_id": t[0],
+            "task_name": t[1],
+            "progress": float(t[2] or 0),
+            "status": t[3],
+            "start_date": str(t[4]) if t[4] else None,
+            "end_date": str(t[5]) if t[5] else None,
+            "assignee": t[6],
+            "project_name": t[7],
+            "project_id": t[8]
+        } for t in conn.execute(text(month_query), {"week_end": week_end.isoformat(), "month_end": month_end.isoformat()}).fetchall()]
+        
+        # 2.4 已过期
+        overdue_query = """
+            SELECT 
+                pt.task_id, pt.task_name, pt.progress, pt.status,
+                pt.start_date, pt.end_date, pt.assignee,
+                p.name as project_name, p.id as project_id
+            FROM project_tasks pt
+            JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
+            WHERE pt.is_deleted = false 
+              AND pt.is_latest = true
+              AND pt.end_date < :today
+              AND (pt.progress < 100 OR pt.progress IS NULL)
+              AND p.is_deleted = false
+            ORDER BY pt.end_date ASC
             LIMIT 100
         """
-        all_tasks = conn.execute(text(tasks_query)).fetchall()
+        overdue_tasks = [{
+            "task_id": t[0],
+            "task_name": t[1],
+            "progress": float(t[2] or 0),
+            "status": t[3],
+            "start_date": str(t[4]) if t[4] else None,
+            "end_date": str(t[5]) if t[5] else None,
+            "assignee": t[6],
+            "project_name": t[7],
+            "project_id": t[8],
+            "delay_days": (today - t[5]).days if t[5] else 0
+        } for t in conn.execute(text(overdue_query), {"today": today.isoformat()}).fetchall()]
         
-        # 分类任务
-        today_tasks = []
-        week_tasks = []
-        month_tasks = []
-        overdue_tasks = []
-        
-        for task in all_tasks:
-            task_data = {
-                "task_id": task[0],
-                "task_name": task[1],
-                "progress": float(task[2] or 0),
-                "status": task[3],
-                "start_date": str(task[4]) if task[4] else None,
-                "end_date": str(task[5]) if task[5] else None,
-                "assignee": task[6],
-                "project_name": task[7],
-                "project_id": task[8]
-            }
-            
-            end_date = task[5]
-            if end_date:
-                if end_date < today:
-                    # 已过期
-                    task_data["delay_days"] = (today - end_date).days
-                    overdue_tasks.append(task_data)
-                elif end_date == today:
-                    today_tasks.append(task_data)
-                elif end_date <= week_end:
-                    week_tasks.append(task_data)
-                elif end_date <= month_end:
-                    month_tasks.append(task_data)
-        
-        # 3. 近期完成（最近7天，包含完成人）
+        # 3. 近期完成（最近7天，包含完成人）- 动态判断完成
         completed_query = """
             SELECT 
                 pt.task_id, pt.task_name, pt.actual_end_date,
@@ -121,7 +193,7 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
             FROM project_tasks pt
             JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
             WHERE pt.is_deleted = false
-              AND pt.status = '已完成'
+              AND pt.progress >= 100
               AND pt.actual_end_date >= :week_ago
               AND p.is_deleted = false
             ORDER BY pt.actual_end_date DESC
@@ -139,18 +211,39 @@ def get_execution_view(user_id: str, user_name: str, role_id: int) -> Dict[str, 
             "assignee": t[4]  # 完成人
         } for t in completed_tasks]
         
-        # 4. 统计数据
+        # 4. 统计数据（从数据库获取真实数量）
+        counts_query = """
+            SELECT 
+                COUNT(CASE WHEN pt.end_date = :today AND (pt.progress < 100 OR pt.progress IS NULL) THEN 1 END) as today_count,
+                COUNT(CASE WHEN pt.end_date > :today AND pt.end_date <= :week_end AND (pt.progress < 100 OR pt.progress IS NULL) THEN 1 END) as week_count,
+                COUNT(CASE WHEN pt.end_date > :week_end AND pt.end_date <= :month_end AND (pt.progress < 100 OR pt.progress IS NULL) THEN 1 END) as month_count,
+                COUNT(CASE WHEN pt.end_date < :today AND (pt.progress < 100 OR pt.progress IS NULL) THEN 1 END) as overdue_count,
+                COUNT(CASE WHEN pt.progress >= 100 AND pt.actual_end_date >= :week_ago THEN 1 END) as completed_week
+            FROM project_tasks pt
+            JOIN projects p ON CAST(p.id AS VARCHAR) = pt.project_id
+            WHERE pt.is_deleted = false 
+              AND pt.is_latest = true
+              AND pt.end_date IS NOT NULL
+              AND p.is_deleted = false
+        """
+        counts = conn.execute(text(counts_query), {
+            "today": today.isoformat(),
+            "week_end": week_end.isoformat(),
+            "month_end": month_end.isoformat(),
+            "week_ago": (today - timedelta(days=7)).isoformat()
+        }).fetchone()
+        
         stats = {
             "total_tasks": total_tasks,
             "status_pending": status_pending,
             "status_ongoing": status_ongoing,
             "status_delayed": status_delayed,
             "status_completed": status_completed,
-            "today_count": len(today_tasks),
-            "week_count": len(week_tasks),
-            "month_count": len(month_tasks),
-            "overdue_count": len(overdue_tasks),
-            "completed_week": len(completed)
+            "today_count": counts[0] or 0,
+            "week_count": counts[1] or 0,
+            "month_count": counts[2] or 0,
+            "overdue_count": counts[3] or 0,
+            "completed_week": counts[4] or 0
         }
         
         return {
@@ -218,7 +311,7 @@ def get_health_view(user_id: str, role_id: int) -> Dict[str, Any]:
                 COUNT(CASE WHEN status = '延期' THEN 1 END) as delayed
             FROM project_tasks
             WHERE is_deleted = false AND is_latest = true
-        """), {"today": today}).fetchone()
+        """), {"today": today.isoformat()}).fetchone()
         
         total_tasks = progress_result[0] or 1
         overdue_tasks = progress_result[1] or 0
@@ -304,7 +397,7 @@ def get_health_view(user_id: str, role_id: int) -> Dict[str, Any]:
                  COUNT(CASE WHEN pt.status = '延期' THEN 1 END) * 10) DESC
             LIMIT 5
         """
-        risk_projects = conn.execute(text(risk_projects_query), {"today": today}).fetchall()
+        risk_projects = conn.execute(text(risk_projects_query), {"today": today.isoformat()}).fetchall()
         
         top_risks = []
         for p in risk_projects:

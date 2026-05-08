@@ -30,10 +30,16 @@ export function confirm(options: ConfirmOptions): Promise<boolean> {
     if (confirmBtn) confirmBtn.textContent = options.confirmText || '确定'
     if (cancelBtn) cancelBtn.textContent = options.cancelText || '取消'
     
-    // 设置边框颜色
+    // 设置边框颜色和按钮颜色
     if (contentEl) {
-      const color = options.type === 'danger' ? '#ef4444' : options.type === 'warning' ? '#eab308' : '#3b82f6'
-      contentEl.style.borderLeftColor = color
+      const borderColor = options.type === 'danger' ? '#ef4444' : options.type === 'warning' ? '#eab308' : '#3b82f6'
+      contentEl.style.borderLeftColor = borderColor
+    }
+    
+    // 设置确认按钮颜色
+    if (confirmBtn) {
+      const btnColor = options.type === 'danger' ? '#ef4444' : options.type === 'warning' ? '#d97706' : '#3b82f6'
+      confirmBtn.style.backgroundColor = btnColor
     }
   }
   
@@ -110,7 +116,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         >
           <div style={{ padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-              <span style={{ fontSize: '20px', marginTop: '2px' }}>⚡</span>
+              <span style={{ fontSize: '20px', marginTop: '2px' }}>📄</span>
               <div style={{ flex: 1 }}>
                 <h3 id="confirm-dialog-title" style={{ fontSize: '16px', fontWeight: 600, color: '#111827', margin: 0 }}>确认</h3>
                 <p id="confirm-dialog-message" style={{ marginTop: '4px', fontSize: '14px', color: '#4b5563', margin: 0 }}>消息</p>
@@ -141,7 +147,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                   fontSize: '14px', 
                   fontWeight: 500, 
                   color: 'white', 
-                  backgroundColor: '#d97706', 
+                  backgroundColor: '#3b82f6', 
                   borderRadius: '8px',
                   border: 'none',
                   cursor: 'pointer'

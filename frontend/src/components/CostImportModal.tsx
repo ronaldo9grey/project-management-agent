@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { useAppStore } from '../store'
+import { apiClient } from '../api'
+import { showToast } from './Toast'
 
 // 飞书 SDK 类型声明
 declare global {
@@ -116,26 +117,23 @@ export default function CostImportModal({ onClose, onSuccess }: CostImportModalP
       const blob = new Blob([new Uint8Array(content)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
       formData.append('file', blob, fileName)
       
-      const token = useAppStore.getState().token
-      const response = await fetch('/api/agent/cost/import/analyze', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
+      const result = await apiClient.post('/api/agent/cost/import/analyze', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
       
-      const result = await response.json()
-      
-      if (result.success) {
-        setFileInfo(result.data)
-        setSelectedSheet(result.data.sheets[0] || '')
+      if (result.data.success) {
+        setFileInfo(result.data.data)
+        setSelectedSheet(result.data.data.sheets[0] || '')
         setStep(2)
       } else {
-        setError(result.detail || '分析失败')
+        setError(result.data.detail || '分析失败')
       }
     } catch (err: any) {
-      setError(err.message || '网络错误')
+      if (err.message?.includes('Failed to fetch')) {
+        showToast('网络连接不稳定，请稍后重试', 'error')
+      } else {
+        setError(err.message || '网络错误')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -148,30 +146,24 @@ export default function CostImportModal({ onClose, onSuccess }: CostImportModalP
     setError('')
     
     try {
-      const token = useAppStore.getState().token
-      const response = await fetch('/api/agent/cost/import/identify', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          columns: fileInfo.columns[selectedSheet],
-          sample_data: fileInfo.sample_data[selectedSheet]
-        })
+      const result = await apiClient.post('/api/agent/cost/import/identify', {
+        columns: fileInfo.columns[selectedSheet],
+        sample_data: fileInfo.sample_data[selectedSheet]
       })
       
-      const result = await response.json()
-      
-      if (result.success) {
-        setColumnMapping(result.data)
-        setCostType(result.data.cost_type || '')
-        setCostSubtype(result.data.cost_subtype || '')
+      if (result.data.success) {
+        setColumnMapping(result.data.data)
+        setCostType(result.data.data.cost_type || '')
+        setCostSubtype(result.data.data.cost_subtype || '')
       } else {
-        setError(result.detail || '识别失败')
+        setError(result.data.detail || '识别失败')
       }
     } catch (err: any) {
-      setError(err.message || '网络错误')
+      if (err.message?.includes('Failed to fetch')) {
+        showToast('网络连接不稳定，请稍后重试', 'error')
+      } else {
+        setError(err.message || '网络错误')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -184,31 +176,25 @@ export default function CostImportModal({ onClose, onSuccess }: CostImportModalP
     setError('')
     
     try {
-      const token = useAppStore.getState().token
-      const response = await fetch('/api/agent/cost/import/preview', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          file_content: fileContent,
-          file_name: file?.name,
-          sheet_name: selectedSheet,
-          column_mapping: columnMapping
-        })
+      const result = await apiClient.post('/api/agent/cost/import/preview', {
+        file_content: fileContent,
+        file_name: file?.name,
+        sheet_name: selectedSheet,
+        column_mapping: columnMapping
       })
       
-      const result = await response.json()
-      
-      if (result.success) {
-        setPreviewData(result.data)
+      if (result.data.success) {
+        setPreviewData(result.data.data)
         setStep(3)
       } else {
-        setError(result.detail || '预览失败')
+        setError(result.data.detail || '预览失败')
       }
     } catch (err: any) {
-      setError(err.message || '网络错误')
+      if (err.message?.includes('Failed to fetch')) {
+        showToast('网络连接不稳定，请稍后重试', 'error')
+      } else {
+        setError(err.message || '网络错误')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -221,33 +207,27 @@ export default function CostImportModal({ onClose, onSuccess }: CostImportModalP
     setError('')
     
     try {
-      const token = useAppStore.getState().token
-      const response = await fetch('/api/agent/cost/import/execute', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          file_content: fileContent,
-          file_name: file?.name,
-          sheet_name: selectedSheet,
-          column_mapping: columnMapping,
-          cost_type: costType,
-          cost_subtype: costSubtype
-        })
+      const result = await apiClient.post('/api/agent/cost/import/execute', {
+        file_content: fileContent,
+        file_name: file?.name,
+        sheet_name: selectedSheet,
+        column_mapping: columnMapping,
+        cost_type: costType,
+        cost_subtype: costSubtype
       })
       
-      const result = await response.json()
-      
-      if (result.success) {
+      if (result.data.success) {
         setStep(4)
         onSuccess()
       } else {
-        setError(result.detail || '导入失败')
+        setError(result.data.detail || '导入失败')
       }
     } catch (err: any) {
-      setError(err.message || '网络错误')
+      if (err.message?.includes('Failed to fetch')) {
+        showToast('网络连接不稳定，请稍后重试', 'error')
+      } else {
+        setError(err.message || '网络错误')
+      }
     } finally {
       setIsLoading(false)
     }
@@ -323,29 +303,25 @@ export default function CostImportModal({ onClose, onSuccess }: CostImportModalP
                         setError('')
                         
                         try {
-                          const token = useAppStore.getState().token
-                          const response = await fetch('/api/agent/cost/import/from-link', {
-                            method: 'POST',
-                            headers: {
-                              'Content-Type': 'application/json',
-                              'Authorization': `Bearer ${token}`
-                            },
-                            body: JSON.stringify({ file_link: link })
+                          const response = await apiClient.post('/api/agent/cost/import/from-link', {
+                            file_link: link
                           })
                           
-                          const data = await response.json()
-                          
-                          if (data.success) {
-                            setFileContent(data.content)
-                            setFileInfo(data.file_info)
-                            setSelectedSheet(data.file_info.sheets[0] || '')
-                            setFile({ name: data.file_name } as File)
+                          if (response.data.success) {
+                            setFileContent(response.data.content)
+                            setFileInfo(response.data.file_info)
+                            setSelectedSheet(response.data.file_info.sheets[0] || '')
+                            setFile({ name: response.data.file_name } as File)
                             setStep(2)
                           } else {
-                            setError(data.detail || '文件读取失败')
+                            setError(response.data.detail || '文件读取失败')
                           }
                         } catch (err: any) {
-                          setError(err.message || '网络错误')
+                          if (err.message?.includes('Failed to fetch')) {
+                            showToast('网络连接不稳定，请稍后重试', 'error')
+                          } else {
+                            setError(err.message || '网络错误')
+                          }
                         } finally {
                           setIsLoading(false)
                         }

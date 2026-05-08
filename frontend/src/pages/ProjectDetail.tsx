@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom'
 import { redirectToLogin } from '../utils/auth'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
-import { projectApi } from '../api'
-import ProjectTaskList from '../components/ProjectTaskList'
+import { projectApi, apiClient } from '../api'
+// ProjectTaskList 不再使用，树形组件已替代
+// import ProjectTaskList from '../components/ProjectTaskList'
 import CostImportModal from '../components/CostImportModal'
 
 interface Project {
@@ -47,11 +48,17 @@ interface Task {
   status: string
   progress?: number
   planned_hours?: number
+  parent_task_id?: string | null
+  task_level?: number
+  actual_end_date?: string | null
+  is_node?: boolean
+  leaf_node?: string
   daily_reports?: Array<{
     report_date: string
     work_content: string
     hours_spent: number
   }>
+  children?: Task[]
 }
 
 interface KnowledgeDoc {
@@ -64,6 +71,194 @@ interface KnowledgeDoc {
   uploader_name: string
 }
 
+// 树形任务节点组件
+function TaskTreeNode({ task, level, expandedPhases, setExpandedPhases, expandedTasks, setExpandedTasks }: {
+  task: Task
+  level: number
+  expandedPhases: Set<string>
+  setExpandedPhases: (s: Set<string>) => void
+  expandedTasks: Set<string>
+  setExpandedTasks: (s: Set<string>) => void
+}) {
+  const hasChildren = task.children && task.children.length > 0
+  const isPhaseLevel = level === 0
+  
+  // 判断是否展开
+  const isExpanded = isPhaseLevel 
+    ? expandedPhases.has(task.task_id)
+    : expandedTasks.has(task.task_id)
+  
+  // 计算进度（父节点从子节点计算）
+  const calcProgress = (t: Task): number => {
+    if (t.children && t.children.length > 0) {
+      const avg = t.children.reduce((sum, c) => sum + calcProgress(c), 0) / t.children.length
+      return Math.round(avg)
+    }
+    return t.progress || 0
+  }
+  const displayProgress = calcProgress(task)
+  
+  // 动态计算状态
+  const getDisplayStatus = (t: Task): string => {
+    const prog = calcProgress(t)
+    if (prog >= 100) return '已完成'
+    if (t.end_date && new Date(t.end_date) < new Date() && prog < 100) return '延期'
+    if (prog > 0) return '进行中'
+    if (t.start_date && new Date(t.start_date) <= new Date()) return '进行中'
+    return '未开始'
+  }
+  const displayStatus = task.status || getDisplayStatus(task)
+  
+  // 状态颜色
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case '已完成': return '#22c55e'
+      case '延期': return '#ef4444'
+      case '进行中': return '#3b82f6'
+      default: return '#94a3b8'
+    }
+  }
+  
+  // 日期格式化
+  const formatDate = (d?: string | null) => {
+    if (!d) return '-'
+    const dt = new Date(d)
+    return `${dt.getMonth()+1}/${dt.getDate()}`
+  }
+  
+  const toggleExpand = () => {
+    if (isPhaseLevel) {
+      const newSet = new Set(expandedPhases)
+      if (isExpanded) newSet.delete(task.task_id)
+      else newSet.add(task.task_id)
+      setExpandedPhases(newSet)
+    } else {
+      const newSet = new Set(expandedTasks)
+      if (isExpanded) newSet.delete(task.task_id)
+      else newSet.add(task.task_id)
+      setExpandedTasks(newSet)
+    }
+  }
+  
+  // 第一层（大阶段）样式
+  if (isPhaseLevel) {
+    return (
+      <div className="task-phase">
+        <div className="task-phase-header" onClick={toggleExpand} style={{ cursor: 'pointer' }}>
+          <span style={{
+            marginRight: '8px',
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s',
+            display: 'inline-block',
+            fontSize: '12px'
+          }}>▶</span>
+          <span style={{ fontWeight: '600', color: '#1e293b', fontSize: '15px' }}>{task.task_name}</span>
+          <span className="text-sm text-gray-500" style={{ marginLeft: '12px' }}>
+            {hasChildren ? `${task.children!.length} 个子项` : ''}
+          </span>
+          <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
+            <div className="progress-bar-sm" style={{ width: '100px' }}>
+              <div className="progress-bar-fill" style={{ width: `${displayProgress}%` }} />
+            </div>
+            <span className="text-sm font-medium">{displayProgress}%</span>
+          </div>
+        </div>
+        {isExpanded && hasChildren && (
+          <div style={{ paddingLeft: '8px' }}>
+            {task.children!.map(child => (
+              <TaskTreeNode 
+                key={child.task_id}
+                task={child}
+                level={level + 1}
+                expandedPhases={expandedPhases}
+                setExpandedPhases={setExpandedPhases}
+                expandedTasks={expandedTasks}
+                setExpandedTasks={setExpandedTasks}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+  
+  // 分组节点（有子任务的中间层）
+  if (hasChildren) {
+    return (
+      <div style={{ marginTop: '2px' }}>
+        <div 
+          onClick={toggleExpand}
+          style={{
+            display: 'flex', alignItems: 'center', padding: '8px 12px',
+            background: isExpanded ? '#f1f5f9' : '#f8fafc',
+            borderRadius: '6px', cursor: 'pointer',
+            borderLeft: `3px solid ${isExpanded ? '#3b82f6' : '#e2e8f0'}`,
+            marginLeft: `${level * 20}px`,
+            transition: 'all 0.15s'
+          }}
+        >
+          <span style={{
+            marginRight: '6px', fontSize: '10px',
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 0.2s', display: 'inline-block'
+          }}>▶</span>
+          <span style={{ fontWeight: '600', color: '#334155', fontSize: '14px' }}>{task.task_name}</span>
+          <div className="flex items-center gap-2" style={{ marginLeft: 'auto' }}>
+            <div className="progress-bar-sm" style={{ width: '80px' }}>
+              <div className="progress-bar-fill" style={{ width: `${displayProgress}%` }} />
+            </div>
+            <span className="text-xs" style={{ color: getStatusColor(displayStatus), fontWeight: 500 }}>{displayProgress}%</span>
+          </div>
+        </div>
+        {isExpanded && (
+          <div style={{ paddingLeft: '8px' }}>
+            {task.children!.map(child => (
+              <TaskTreeNode 
+                key={child.task_id}
+                task={child}
+                level={level + 1}
+                expandedPhases={expandedPhases}
+                setExpandedPhases={setExpandedPhases}
+                expandedTasks={expandedTasks}
+                setExpandedTasks={setExpandedTasks}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+  
+  // 叶子任务
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', padding: '8px 12px',
+      borderBottom: '1px solid #f1f5f9',
+      marginLeft: `${level * 20}px`,
+      fontSize: '13px'
+    }}>
+      <span style={{ flex: 1, color: '#475569' }}>{task.task_name}</span>
+      <span style={{ color: '#64748b', fontSize: '12px', margin: '0 8px', whiteSpace: 'nowrap' }}>
+        {formatDate(task.start_date)} ~ {formatDate(task.end_date)}
+      </span>
+      {task.actual_end_date && (
+        <span style={{ color: '#22c55e', fontSize: '11px', margin: '0 6px', whiteSpace: 'nowrap' }}>
+          ✓ {formatDate(task.actual_end_date)}
+        </span>
+      )}
+      <div className="progress-bar-sm" style={{ width: '60px', margin: '0 6px' }}>
+        <div className="progress-bar-fill" style={{ width: `${displayProgress}%` }} />
+      </div>
+      <span style={{ 
+        color: getStatusColor(displayStatus), 
+        fontSize: '12px', fontWeight: 500, minWidth: '45px', textAlign: 'right' 
+      }}>
+        {displayStatus}
+      </span>
+    </div>
+  )
+}
+
 export default function ProjectDetailPage() {
   const { user, logout } = useAppStore()
   const [showUserMenu, setShowUserMenu] = useState(false)
@@ -72,7 +267,7 @@ export default function ProjectDetailPage() {
   const [knowledgeDocs, setKnowledgeDocs] = useState<KnowledgeDoc[]>([])
   const [taskRisks, setTaskRisks] = useState<any>(null)
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())  // 展开的任务ID
-  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(['需求阶段', '设计阶段', '开发阶段', '测试阶段']))  // 默认全部展开
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set())  // 默认收起，用户手动展开
   const [isLoading, setIsLoading] = useState(true)
   
   // 聊天相关状态
@@ -91,22 +286,50 @@ export default function ProjectDetailPage() {
   // 成本导入状态
   const [showCostImport, setShowCostImport] = useState(false)
   
-  // 任务阶段分组
-  const getTaskPhase = (taskName: string) => {
-    if (taskName.includes('需求') || taskName.includes('调研')) return '需求阶段'
-    if (taskName.includes('设计') || taskName.includes('数据库')) return '设计阶段'
-    if (taskName.includes('开发') || taskName.includes('接口') || taskName.includes('安全')) return '开发阶段'
-    if (taskName.includes('测试') || taskName.includes('联调')) return '测试阶段'
-    return '其他'
+  // 构建树形任务结构
+  const buildTaskTree = (taskList: Task[]): Task[] => {
+    if (!taskList || taskList.length === 0) return []
+    
+    // 检查是否有层级信息
+    const hasHierarchy = taskList.some(t => t.task_level !== undefined)
+    
+    // 如果没有层级信息，直接返回平铺列表
+    if (!hasHierarchy) {
+      return taskList
+    }
+    
+    // 构建树形结构
+    const taskMap = new Map<string, Task>()
+    taskList.forEach(t => taskMap.set(t.task_id, { ...t, children: [] }))
+    
+    const roots: Task[] = []
+    taskList.forEach(t => {
+      const node = taskMap.get(t.task_id)!
+      if (t.parent_task_id && taskMap.has(t.parent_task_id)) {
+        const parent = taskMap.get(t.parent_task_id)!
+        if (!parent.children) parent.children = []
+        parent.children.push(node)
+      } else if (t.task_level === 1) {
+        roots.push(node)
+      }
+    })
+    
+    return roots
   }
   
-  // 按阶段分组任务
-  const groupedTasks = tasks.reduce((acc, task) => {
-    const phase = getTaskPhase(task.task_name)
-    if (!acc[phase]) acc[phase] = []
-    acc[phase].push(task)
-    return acc
-  }, {} as Record<string, Task[]>)
+  // 树形任务列表
+  const taskTree = buildTaskTree(tasks)
+  
+  // 计算叶子任务数（实际执行的任务）
+  const countLeafTasks = (nodes: Task[]): number => {
+    return nodes.reduce((sum, node) => {
+      if (node.children && node.children.length > 0) {
+        return sum + countLeafTasks(node.children)
+      }
+      return sum + 1
+    }, 0)
+  }
+  const leafTaskCount = countLeafTasks(taskTree)
 
   // 从URL获取项目ID
   const projectId = parseInt(window.location.pathname.split('/').pop() || '0')
@@ -241,7 +464,6 @@ export default function ProjectDetailPage() {
     if (!uploadForm.doc_name || !uploadForm.file) return
     
     try {
-      const { token } = useAppStore.getState()
       const formData = new FormData()
       formData.append('project_id', projectId.toString())
       formData.append('project_name', project?.name || '')
@@ -249,30 +471,21 @@ export default function ProjectDetailPage() {
       formData.append('doc_type', uploadForm.doc_type)
       formData.append('file', uploadForm.file)
       
-      const res = await fetch('/api/agent/knowledge/upload', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
+      const res = await apiClient.post('/api/agent/knowledge/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
       
-      if (res.ok) {
-        const data = await res.json()
-        if (data.success) {
-          setShowUploadModal(false)
-          setUploadForm({ doc_name: '', doc_type: '需求文档', file: null })
-          await loadKnowledgeBase()
-          alert('文档上传成功！')
-        } else {
-          alert(data.message || '上传失败')
-        }
+      if (res.data.success) {
+        setShowUploadModal(false)
+        setUploadForm({ doc_name: '', doc_type: '需求文档', file: null })
+        await loadKnowledgeBase()
+        alert('文档上传成功！')
       } else {
-        alert('上传失败，请稍后重试')
+        alert(res.data.message || '上传失败')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('上传失败:', error)
-      alert('上传失败，请检查网络连接')
+      alert(error.message || '上传失败，请检查网络连接')
     }
   }
 
@@ -407,13 +620,17 @@ export default function ProjectDetailPage() {
 
       {/* 主内容 */}
       <main className="content-wrapper">
-        {/* 返回按钮 */}
-        <Link to="/projects" className="back-link">
+        {/* 返回按钮 - 根据来源返回 */}
+        <a 
+          href={sessionStorage.getItem('project_detail_from') === 'quality' ? '/agent/quality' : '/agent/projects'}
+          onClick={() => sessionStorage.removeItem('project_detail_from')}
+          className="back-link"
+        >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          返回项目列表
-        </Link>
+          {sessionStorage.getItem('project_detail_from') === 'quality' ? '返回质量管理' : '返回项目列表'}
+        </a>
         
         {/* ========== 第一行：项目基本信息（全宽）========== */}
         <div className="card mt-4">
@@ -820,7 +1037,7 @@ export default function ProjectDetailPage() {
           <div className="card-header">
             <h2 className="card-title">📋 项目计划</h2>
             <div className="flex items-center gap-3">
-              <span className="text-sm text-gray-500">{(tasks || []).length} 个任务</span>
+              <span className="text-sm text-gray-500">{leafTaskCount || tasks.length} 个任务</span>
               <Link to={`/plans?project_id=${project?.id}`} className="btn btn-secondary btn-sm">
                 上传计划
               </Link>
@@ -835,61 +1052,18 @@ export default function ProjectDetailPage() {
               </div>
             ) : (
               <div className="task-tree">
-                {Object.entries(groupedTasks || {}).map(([phase, phaseTasks]) => {
-                  const isPhaseExpanded = expandedPhases.has(phase)
-                  const phaseProgress = phaseTasks.reduce((sum, t) => sum + (t.progress || 0), 0) / (phaseTasks.length || 1)
-                  
-                  return (
-                    <div key={phase} className="task-phase">
-                      <div 
-                        className="task-phase-header"
-                        onClick={() => {
-                          const newExpanded = new Set(expandedPhases)
-                          if (isPhaseExpanded) {
-                            newExpanded.delete(phase)
-                          } else {
-                            newExpanded.add(phase)
-                          }
-                          setExpandedPhases(newExpanded)
-                        }}
-                      >
-                        <span style={{
-                          marginRight: '8px',
-                          transform: isPhaseExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                          transition: 'transform 0.2s',
-                          display: 'inline-block'
-                        }}>▶</span>
-                        <span style={{fontWeight: '600', color: '#1e293b'}}>{phase}</span>
-                        <span className="text-sm text-gray-500" style={{marginLeft: '12px'}}>
-                          {(phaseTasks?.length || 0)} 个任务
-                        </span>
-                        <div className="flex items-center gap-2" style={{marginLeft: 'auto'}}>
-                          <div className="progress-bar-sm" style={{width: '100px'}}>
-                            <div className="progress-bar-fill" style={{ width: `${phaseProgress}%` }} />
-                          </div>
-                          <span className="text-sm font-medium">{phaseProgress.toFixed(0)}%</span>
-                        </div>
-                      </div>
-                      
-                      {isPhaseExpanded && (
-                        <ProjectTaskList 
-                          tasks={phaseTasks || []}
-                          initialLimit={5}
-                          expandedTasks={expandedTasks}
-                          onToggleTask={(taskId) => {
-                            const newExpanded = new Set(expandedTasks)
-                            if (newExpanded.has(taskId)) {
-                              newExpanded.delete(taskId)
-                            } else {
-                              newExpanded.add(taskId)
-                            }
-                            setExpandedTasks(newExpanded)
-                          }}
-                        />
-                      )}
-                    </div>
-                  )
-                })}
+                {/* 树形任务渲染 */}
+                {taskTree.map((rootTask) => (
+                  <TaskTreeNode 
+                    key={rootTask.task_id} 
+                    task={rootTask} 
+                    level={0}
+                    expandedPhases={expandedPhases}
+                    setExpandedPhases={setExpandedPhases}
+                    expandedTasks={expandedTasks}
+                    setExpandedTasks={setExpandedTasks}
+                  />
+                ))}
               </div>
             )}
           </div>

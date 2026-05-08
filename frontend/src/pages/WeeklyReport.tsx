@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom'
 import { redirectToLogin } from '../utils/auth'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
+import { apiClient } from '../api'
+import { showToast } from '../components/Toast'
 
 export default function WeeklyReportPage() {
   const { user, logout } = useAppStore()
@@ -21,17 +23,19 @@ export default function WeeklyReportPage() {
   const loadReports = async () => {
     setIsLoading(true)
     try {
-      const token = useAppStore.getState().token
-      const response = await fetch(`/api/agent/weekly-reports?page=${page}&size=10`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const result = await response.json()
-      if (result.success) {
-        setReports(result.data.items)
-        setTotal(result.data.total)
+      const result = await apiClient.get(`/api/agent/weekly-reports?page=${page}&size=10`)
+      if (result.data.success) {
+        setReports(result.data.data.items)
+        setTotal(result.data.data.total)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('加载周报列表失败:', error)
+      if (error.message?.includes('Failed to fetch')) {
+        showToast('网络连接不稳定，正在重试...', 'warning')
+        setTimeout(() => loadReports(), 2000)
+        return
+      }
+      showToast('加载周报列表失败', 'error')
     } finally {
       setIsLoading(false)
     }
@@ -40,25 +44,16 @@ export default function WeeklyReportPage() {
   const generateReport = async () => {
     setIsGenerating(true)
     try {
-      const token = useAppStore.getState().token
-      const response = await fetch('/api/agent/weekly-reports/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({})
-      })
-      const result = await response.json()
+      const result = await apiClient.post('/api/agent/weekly-reports/generate', {})
       
-      if (result.success) {
-        alert(`✅ 成功生成 ${result.data.reports.length} 份周报！`)
+      if (result.data.success) {
+        showToast(`成功生成 ${result.data.data.reports.length} 份周报！`, 'success')
         loadReports()
       } else {
-        alert(result.message || '生成失败')
+        showToast(result.data.message || '生成失败', 'error')
       }
     } catch (error: any) {
-      alert('生成失败: ' + error.message)
+      showToast('生成失败: ' + error.message, 'error')
     } finally {
       setIsGenerating(false)
     }
@@ -66,16 +61,13 @@ export default function WeeklyReportPage() {
 
   const viewReportDetail = async (reportId: number) => {
     try {
-      const token = useAppStore.getState().token
-      const response = await fetch(`/api/agent/weekly-reports/${reportId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      })
-      const result = await response.json()
-      if (result.success) {
-        setSelectedReport(result.data)
+      const result = await apiClient.get(`/api/agent/weekly-reports/${reportId}`)
+      if (result.data.success) {
+        setSelectedReport(result.data.data)
       }
     } catch (error) {
       console.error('加载周报详情失败:', error)
+      showToast('加载周报详情失败', 'error')
     }
   }
 
@@ -125,7 +117,9 @@ ${(analysis.highlights || []).map((h: string) => `- ${h}`).join('\n')}
               <Link to="/" className="nav-link">个人</Link>
               <Link to="/daily" className="nav-link">日报</Link>
               <Link to="/projects" className="nav-link">项目</Link>
-              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/tracking" className="nav-link">追踪</Link>
+              <Link to="/quality" className="nav-link">质量</Link>
+              <Link to="/dashboard" className="nav-link active">看板</Link>
             </nav>
           </div>
           <div className="header-right">
@@ -379,6 +373,14 @@ ${(analysis.highlights || []).map((h: string) => `- ${h}`).join('\n')}
         <Link to="/projects" className="mobile-nav-item">
           <span className="mobile-nav-icon">📊</span>
           <span>项目</span>
+        </Link>
+        <Link to="/tracking" className="mobile-nav-item">
+          <span className="mobile-nav-icon">📍</span>
+          <span>追踪</span>
+        </Link>
+        <Link to="/quality" className="mobile-nav-item">
+          <span className="mobile-nav-icon">🎯</span>
+          <span>质量</span>
         </Link>
       </nav>
 

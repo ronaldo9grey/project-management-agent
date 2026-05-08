@@ -1,13 +1,41 @@
-import axios, { AxiosError, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios'
+import axios, { AxiosError, type InternalAxiosRequestConfig, type AxiosResponse, type CancelTokenSource } from 'axios'
 import { useAppStore } from './store'
 import { showToast } from './components/Toast'
-import { isTokenExpiringSoon } from './utils/auth'
+import { isTokenExpiringSoon, redirectToLogin } from './utils/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/agent-api'
 
+// 请求取消控制器
+const pendingRequests = new Map<string, CancelTokenSource>()
+
 function showErrorMessage(message: string) {
-  console.error('[API Error]', message)
   showToast(message, 'error')
+  // 生产环境不打印到控制台，减少刷屏
+  if (import.meta.env.DEV) {
+    console.error('[API Error]', message)
+  }
+}
+
+/**
+ * 取消所有未完成的请求
+ */
+export function cancelAllRequests() {
+  pendingRequests.forEach((source, key) => {
+    source.cancel(`请求已取消: ${key}`)
+  })
+  pendingRequests.clear()
+  console.log('[API] 已取消所有未完成的请求')
+}
+
+/**
+ * 取消特定请求
+ */
+export function cancelRequest(url: string) {
+  const source = pendingRequests.get(url)
+  if (source) {
+    source.cancel(`请求已取消: ${url}`)
+    pendingRequests.delete(url)
+  }
 }
 
 export const apiClient = axios.create({
@@ -34,8 +62,14 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = []
 }
 
-// 请求拦截器 - 添加token + 自动刷新
+// 请求拦截器 - 添加token + 自动刷新 + 请求取消
 apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+  // 添加取消令牌
+  const requestKey = `${config.method}:${config.url}`
+  const source = axios.CancelToken.source()
+  config.cancelToken = source.token
+  pendingRequests.set(requestKey, source)
+  
   const token = useAppStore.getState().token
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -79,9 +113,25 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
 const MAX_RETRY = 3
 
 apiClient.interceptors.response.use(
-  (response: AxiosResponse) => response,
+  (response: AxiosResponse) => {
+    // 移除已完成的请求
+    const requestKey = `${response.config.method}:${response.config.url}`
+    pendingRequests.delete(requestKey)
+    return response
+  },
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: number }
+    
+    // 移除已完成的请求（包括错误的）
+    if (originalRequest) {
+      const requestKey = `${originalRequest.method}:${originalRequest.url}`
+      pendingRequests.delete(requestKey)
+    }
+    
+    // 如果是取消请求，静默处理（不打印日志避免刷屏）
+    if (axios.isCancel(error)) {
+      return Promise.reject(error)
+    }
     
     // 排除登录接口的 401 处理
     const isLoginRequest = error.config?.url?.includes('/auth/login')
@@ -99,7 +149,10 @@ apiClient.interceptors.response.use(
       
       // 指数退避：1.5s → 3s → 6s
       const delay = 1500 * Math.pow(2, originalRequest._retry - 1)
-      console.log(`[Network] 连接失败，${delay/1000}s 后重试 ${originalRequest._retry}/${MAX_RETRY}`)
+      // 只在开发环境打印重试日志
+      if (import.meta.env.DEV) {
+        console.log(`[Network] 连接失败，${delay/1000}s 后重试 ${originalRequest._retry}/${MAX_RETRY}`)
+      }
       
       await new Promise(r => setTimeout(r, delay))
       return apiClient(originalRequest)
@@ -107,7 +160,9 @@ apiClient.interceptors.response.use(
     
     // 网络错误重试失败后
     if (!error.response) {
-      console.error('[Network] 连接失败，重试次数已用尽')
+      if (import.meta.env.DEV) {
+        console.error('[Network] 连接失败，重试次数已用尽')
+      }
       showErrorMessage('网络连接不稳定，请稍后重试')
       return Promise.reject(error)
     }
@@ -117,14 +172,14 @@ apiClient.interceptors.response.use(
       // 如果是刷新接口 401，说明 token 完全失效
       if (isRefreshRequest) {
         console.log('[Auth] Token 刷新失败，需要重新登录')
-        showErrorMessage('登录已过期，请刷新页面重新登录')
+        redirectToLogin()
         return Promise.reject(error)
       }
       
       // 检查刷新尝试次数
       if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
         console.log('[Auth] 刷新尝试次数过多，停止重试')
-        showErrorMessage('登录已过期，请刷新页面重新登录')
+        redirectToLogin()
         return Promise.reject(error)
       }
       
@@ -142,7 +197,7 @@ apiClient.interceptors.response.use(
             // 检查 token 是否真的变化了
             if (newToken === lastRefreshToken) {
               console.log('[Auth] Token 未变化，刷新无效')
-              showErrorMessage('登录已过期，请刷新页面重新登录')
+              redirectToLogin()
               isRefreshing = false
               return Promise.reject(new Error('Token refresh ineffective'))
             }
@@ -162,7 +217,7 @@ apiClient.interceptors.response.use(
         } catch (refreshError) {
           isRefreshing = false
           console.log('[Auth] Token 刷新失败')
-          showErrorMessage('登录已过期，请刷新页面重新登录')
+          redirectToLogin()
           return Promise.reject(refreshError)
         }
       } else {
@@ -205,6 +260,8 @@ export const dailyApi = {
     const res = await apiClient.post('/api/agent/daily/smart-parse', {
       text,
       report_date: reportDate
+    }, {
+      timeout: 60000  // AI 解析可能需要较长时间，设置 60 秒超时
     })
     return res.data as {
       entries: Array<{
@@ -275,6 +332,53 @@ export const dailyApi = {
       total: number
       page: number
       size: number
+    }
+  },
+  
+  // 获取月度日报摘要（日历视图用）
+  getMonthlySummary: async (year: number, month: number) => {
+    const res = await apiClient.get('/api/agent/daily/monthly-summary', {
+      params: { year, month }
+    })
+    return res.data as {
+      year: number
+      month: number
+      days: Record<number, {
+        has_report: boolean
+        total_hours: number
+        report_id: number
+      }>
+      working_days: number
+      total_hours: number
+      report_count: number
+      missing_days: number
+    }
+  },
+  
+  // 按日期获取日报详情
+  getByDate: async (date: string) => {
+    const res = await apiClient.get('/api/agent/daily/by-date', {
+      params: { date }
+    })
+    return res.data as {
+      has_report: boolean
+      id?: number
+      report_date?: string
+      total_hours?: number
+      status?: string
+      created_at?: string
+      items?: Array<{
+        work_content: string
+        project_name: string
+        start_time: string
+        end_time: string
+        hours_spent: number
+        task_id?: string
+        task_name?: string
+      }>
+      original_input?: string
+      ai_parsed_data?: any
+      ai_parsed?: boolean
     }
   },
   
@@ -1027,5 +1131,78 @@ export const boardApi = {
   testPush: async () => {
     const res = await apiClient.post('/api/agent/dashboard/test-push')
     return res.data as { success: boolean; message: string }
+  },
+
+  // 获取月度人员工时统计
+  getMonthlyEmployeeHours: async (year?: number, month?: number) => {
+    const res = await apiClient.get('/api/agent/stats/monthly-employee-hours', {
+      params: { year, month }
+    })
+    return res.data as {
+      year: number
+      month: number
+      month_start: string
+      month_end: string
+      employees: Array<{
+        employee_name: string
+        projects: Array<{
+          project_name: string
+          hours: number
+          percent: number
+        }>
+        total_hours: number
+        report_count: number
+      }>
+      total_hours: number
+      total_reports: number
+    }
+  },
+
+  // 导出月度人员工时统计Excel
+  exportMonthlyEmployeeHours: async (year?: number, month?: number) => {
+    const res = await apiClient.get('/api/agent/stats/monthly-employee-hours/export', {
+      params: { year, month },
+      responseType: 'blob'
+    })
+    return res.data as Blob
+  }
+}
+
+// 统一导出的API对象（供Dashboard使用）
+export const api = {
+  getMonthlyEmployeeHours: async (year?: number, month?: number) => {
+    const res = await apiClient.get('/api/agent/stats/monthly-employee-hours', {
+      params: { year, month }
+    })
+    return res.data as {
+      year: number
+      month: number
+      month_start: string
+      month_end: string
+      working_days: number
+      employees: Array<{
+        employee_name: string
+        projects: Array<{
+          project_name: string
+          hours: number
+          percent: number
+        }>
+        total_hours: number
+        report_count: number
+        required_days: number
+        filled_days: number
+        missing_days: number
+      }>
+      total_hours: number
+      total_reports: number
+    }
+  },
+
+  exportMonthlyEmployeeHours: async (year?: number, month?: number) => {
+    const res = await apiClient.get('/api/agent/stats/monthly-employee-hours/export', {
+      params: { year, month },
+      responseType: 'blob'
+    })
+    return res.data as Blob
   }
 }
