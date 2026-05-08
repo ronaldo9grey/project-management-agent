@@ -70,9 +70,10 @@ interface Project {
 interface EmployeeHoursData {
   year: number
   month: number
-  month_start: string
-  month_end: string
+  month_start?: string
+  month_end?: string
   working_days: number
+  employee_count?: number
   employees: Array<{
     employee_name: string
     projects: Array<{
@@ -82,7 +83,7 @@ interface EmployeeHoursData {
     }>
     total_hours: number
     report_count: number
-    required_days: number
+    required_days?: number
     filled_days: number
     missing_days: number
   }>
@@ -93,6 +94,8 @@ interface EmployeeHoursData {
 interface ProjectHoursData {
   year: number
   month: number
+  working_days?: number
+  employee_count?: number
   official_projects: Array<{
     project_name: string
     members: Record<string, number>
@@ -334,49 +337,148 @@ function MonthlyHoursCard({
       <div className="card-body" style={{ padding: 0 }}>
         {/* 人员维度 */}
         {viewMode === 'employee' && data && (
-          <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-              <thead>
-                <tr style={{ background: '#f3f4f6', position: 'sticky', top: 0, zIndex: 1 }}>
-                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>姓名</th>
-                  <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>总工时</th>
-                  <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>日报数</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.employees.map(emp => (
-                  <tr key={emp.employee_name} style={{ cursor: 'pointer' }} onClick={() => setExpandedEmployee(expandedEmployee === emp.employee_name ? null : emp.employee_name)}>
-                    <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', fontWeight: '500' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{
-                          display: 'inline-block',
-                          transition: 'transform 0.2s',
-                          transform: expandedEmployee === emp.employee_name ? 'rotate(90deg)' : 'none'
-                        }}>▶</span>
-                        {emp.employee_name}
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{emp.total_hours}h</td>
-                    <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{emp.report_count}</td>
+          <>
+            {/* 统计信息 */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-around',
+              background: '#f9fafb'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: '#3b82f6' }}>{data.working_days}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>总工作日</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: '#10b981' }}>{data.total_hours}h</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>总工时</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: '#f59e0b' }}>{data.employee_count}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>参与人数</div>
+              </div>
+            </div>
+          
+            <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                  <tr style={{ background: '#f3f4f6', position: 'sticky', top: 0, zIndex: 1 }}>
+                    <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>姓名</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>总工时</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>日报数</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>填报天数</th>
+                    <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb', fontWeight: '600' }}>缺失</th>
                   </tr>
-                ))}
-                <tr style={{ background: '#f9fafb', fontWeight: '600' }}>
-                  <td style={{ padding: '12px 10px', borderBottom: '2px solid #e5e7eb' }}>合计</td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{data.total_hours}h</td>
-                  <td style={{ padding: '12px 10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{data.total_reports}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {data.employees.map(emp => (
+                    <>
+                      <tr 
+                        key={emp.employee_name} 
+                        style={{ cursor: 'pointer', background: expandedEmployee === emp.employee_name ? '#eff6ff' : 'white' }} 
+                        onClick={() => setExpandedEmployee(expandedEmployee === emp.employee_name ? null : emp.employee_name)}
+                      >
+                        <td style={{ padding: '10px', borderBottom: '1px solid #e5e7eb', fontWeight: '500' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              transition: 'transform 0.2s',
+                              transform: expandedEmployee === emp.employee_name ? 'rotate(90deg)' : 'none'
+                            }}>▶</span>
+                            {emp.employee_name}
+                          </div>
+                        </td>
+                        <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{emp.total_hours}h</td>
+                        <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{emp.report_count}</td>
+                        <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #e5e7eb' }}>{emp.filled_days}</td>
+                        <td style={{ 
+                          padding: '10px', 
+                          textAlign: 'right', 
+                          borderBottom: '1px solid #e5e7eb',
+                          color: emp.missing_days > 0 ? '#ef4444' : '#22c55e',
+                          fontWeight: 600
+                        }}>
+                          {emp.missing_days > 0 ? `-${emp.missing_days}` : '✓'}
+                        </td>
+                      </tr>
+                      {/* 展开显示项目分布 */}
+                      {expandedEmployee === emp.employee_name && emp.projects && (
+                        <tr key={`${emp.employee_name}-detail`}>
+                          <td colSpan={5} style={{ padding: '0', background: '#f9fafb' }}>
+                            <div style={{ padding: '12px 20px 12px 40px' }}>
+                              <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>项目工时分布：</div>
+                              {emp.projects.map((proj, idx) => (
+                                <div 
+                                  key={idx} 
+                                  style={{ 
+                                    display: 'flex', 
+                                    alignItems: 'center', 
+                                    justifyContent: 'space-between',
+                                    padding: '6px 12px',
+                                    marginBottom: '4px',
+                                    background: 'white',
+                                    borderRadius: '4px',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {proj.project_name}
+                                  </span>
+                                  <span style={{ fontWeight: 600, color: '#3b82f6', marginLeft: '12px' }}>
+                                    {proj.hours}h ({proj.percent}%)
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  ))}
+                  <tr style={{ background: '#f9fafb', fontWeight: '600' }}>
+                    <td style={{ padding: '12px 10px', borderBottom: '2px solid #e5e7eb' }}>合计</td>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{data.total_hours}h</td>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>{data.total_reports}</td>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>-</td>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', borderBottom: '2px solid #e5e7eb' }}>-</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
         
         {/* 项目维度 */}
         {viewMode === 'project' && projectData && (
-          <div style={{ 
-            maxHeight: '500px', 
-            overflow: 'auto',
-            position: 'relative'
-          }}>
+          <>
+            {/* 统计信息 */}
+            <div style={{
+              padding: '16px 20px',
+              borderBottom: '1px solid #e5e7eb',
+              display: 'flex',
+              justifyContent: 'space-around',
+              background: '#f9fafb'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: '#3b82f6' }}>{projectData.working_days || 22}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>总工作日</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: '#10b981' }}>{projectData.grand_total}h</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>总工时</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '24px', fontWeight: 600, color: '#f59e0b' }}>{projectData.employee_count || projectData.all_employees?.length || 0}</div>
+                <div style={{ fontSize: '12px', color: '#6b7280' }}>参与人数</div>
+              </div>
+            </div>
+          
+            <div style={{ 
+              maxHeight: '500px', 
+              overflow: 'auto',
+              position: 'relative'
+            }}>
             <table style={{ 
               width: 'max-content',
               minWidth: '100%',
@@ -584,6 +686,7 @@ function MonthlyHoursCard({
               </tbody>
             </table>
           </div>
+          </>
         )}
         
         {/* 工时详情弹窗 */}

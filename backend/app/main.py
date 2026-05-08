@@ -2759,6 +2759,7 @@ async def get_monthly_employee_hours(
             "month_start": month_start.isoformat(),
             "month_end": month_end.isoformat(),
             "working_days": working_days,  # 当月工作日数
+            "employee_count": len(result_list),  # 参与人数
             "employees": result_list,
             "total_hours": round(total_hours_raw, 1),  # 统一四舍五入
             "total_reports": sum(e["report_count"] for e in result_list)
@@ -3078,10 +3079,15 @@ async def get_monthly_project_hours(
         all_employee_totals = {k: round(v, 1) for k, v in sorted(all_employee_totals.items(), key=lambda x: x[1], reverse=True)}
         
         grand_total = round(sum(official_employee_totals_raw.values()) + sum(other_employee_totals_raw.values()), 1)
+        
+        # 计算工作日（简化：每月22个工作日）
+        working_days = 22
 
         return {
             "year": year,
             "month": month,
+            "working_days": working_days,  # 月份总工作日
+            "employee_count": len(all_employees),  # 参与人数
             "official_projects": official_list,
             "official_employee_totals": official_employee_totals,
             "official_grand_total": official_grand_total,
