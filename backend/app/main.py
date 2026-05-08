@@ -1148,14 +1148,24 @@ async def smart_parse_daily(
         import sys
         sys.path.insert(0, os.path.dirname(__file__))
         from task_auto import parse_daily_all_in_one_threaded
+        import httpx
 
         logger.info(f"用户 {current_user.get('username')} 开始解析日报: {request.text[:50]}...")
         
         # 在线程池中执行 AI 解析，主事件循环释放处理其他请求
-        result = await parse_daily_all_in_one_threaded(request.text, request.report_date)
+        try:
+            result = await parse_daily_all_in_one_threaded(request.text, request.report_date)
+        except httpx.ReadTimeout:
+            logger.error("AI解析超时")
+            raise HTTPException(status_code=504, detail="AI解析超时，请稍后再试")
+        except Exception as e:
+            logger.error(f"AI解析异常: {e}")
+            raise HTTPException(status_code=500, detail=f"AI解析异常: {str(e)}")
         
         if not result.get("success"):
-            raise HTTPException(status_code=500, detail="AI解析失败")
+            error_msg = result.get("error", "AI解析失败")
+            logger.error(f"AI解析失败: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
         
         # 转换为前端期望的格式
         entries = []
@@ -1203,11 +1213,16 @@ async def smart_parse_daily(
             "issues": result.get("warnings", [])
         }
 
-    except Exception as e:
-        logger.error(f"解析失败: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+    except HTTPException:
+            raise  # 重新抛出已处理的HTTP异常
+        except httpx.ReadTimeout:
+            logger.error("AI解析超时")
+            raise HTTPException(status_code=504, detail="AI解析超时，请稍后再试")
+        except Exception as e:
+            logger.error(f"解析失败: {e}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
 
 
 class CreateReportRequest(BaseModel):
