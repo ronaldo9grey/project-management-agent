@@ -231,9 +231,8 @@ async def get_monthly_employee_hours(
         return {
             "year": year,
             "month": month,
-            "month_start": str(month_start),
-            "month_end": str(month_end),
-            "working_days": working_days,
+            "working_days": working_days,  # 月份总工作日
+            "employee_count": len(employees_list),  # 参与人数
             "employees": employees_list,
             "total_hours": round(total_hours_all, 1),
             "total_reports": total_reports
@@ -295,7 +294,10 @@ async def get_monthly_project_hours(
                     "total_hours": 0
                 }
             
-            official_hours[project_name]["members"][emp_name] = official_hours[project_name]["members"].get(emp_name, 0) + hours
+            # 修复：members 值也要 round，避免浮点数精度问题
+            official_hours[project_name]["members"][emp_name] = round(
+                official_hours[project_name]["members"].get(emp_name, 0) + hours, 1
+            )
             official_hours[project_name]["total_hours"] += hours
         
         # 查询未匹配项目的工时数据
@@ -336,23 +338,28 @@ async def get_monthly_project_hours(
                     "total_hours": 0
                 }
             
-            other_work_hours[category_name]["members"][emp_name] = other_work_hours[category_name]["members"].get(emp_name, 0) + hours
+            # 修复：members 值也要 round，避免浮点数精度问题
+            other_work_hours[category_name]["members"][emp_name] = round(
+                other_work_hours[category_name]["members"].get(emp_name, 0) + hours, 1
+            )
             other_work_hours[category_name]["total_hours"] += hours
         
         # 计算员工小计
         official_employee_totals = {}
         for proj in official_hours.values():
             for emp, hours in proj["members"].items():
-                official_employee_totals[emp] = official_employee_totals.get(emp, 0) + hours
+                official_employee_totals[emp] = round(official_employee_totals.get(emp, 0) + hours, 1)
         
         other_employee_totals = {}
         for proj in other_work_hours.values():
             for emp, hours in proj["members"].items():
-                other_employee_totals[emp] = other_employee_totals.get(emp, 0) + hours
+                other_employee_totals[emp] = round(other_employee_totals.get(emp, 0) + hours, 1)
         
         all_employee_totals = {}
         for emp in all_employees:
-            all_employee_totals[emp] = official_employee_totals.get(emp, 0) + other_employee_totals.get(emp, 0)
+            all_employee_totals[emp] = round(
+                official_employee_totals.get(emp, 0) + other_employee_totals.get(emp, 0), 1
+            )
         
         # 转换为列表并排序
         official_list = list(official_hours.values())
@@ -373,9 +380,14 @@ async def get_monthly_project_hours(
         for proj in other_list:
             proj["total_hours"] = round(proj["total_hours"], 1)
         
+        # 计算工作日（简化：每月22个工作日）
+        working_days = 22
+        
         return {
             "year": year,
             "month": month,
+            "working_days": working_days,  # 月份总工作日
+            "employee_count": len(all_employees),  # 参与人数
             "official_projects": official_list,
             "official_employee_totals": {k: round(v, 1) for k, v in official_employee_totals.items()},
             "official_grand_total": round(sum(official_employee_totals.values()), 1),
