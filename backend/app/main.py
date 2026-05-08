@@ -16,6 +16,8 @@ from slowapi.errors import RateLimitExceeded
 
 # 路由模块（拆分计划）- 使用相对导入
 from .routes.health import router as health_router
+from .routes.stats import router as stats_router
+from .routes.dashboard import router as dashboard_router
 
 # LangChain imports
 from langchain_openai import ChatOpenAI
@@ -75,6 +77,8 @@ load_dotenv()
 
 # 注册路由模块（拆分计划）
 app.include_router(health_router)  # health路由
+app.include_router(stats_router)   # stats路由
+app.include_router(dashboard_router)  # dashboard路由
 
 # 配置
 class Settings:
