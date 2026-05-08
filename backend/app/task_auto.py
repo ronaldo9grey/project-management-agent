@@ -174,7 +174,7 @@ def _match_task_by_content_ai_sync(work_content: str, project_id: int, project_n
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "deepseek-chat",
+                    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
                     "messages": [
                         {"role": "system", "content": "你是一个精确的任务匹配助手，只返回 JSON 格式结果。"},
                         {"role": "user", "content": prompt}
@@ -287,7 +287,7 @@ def _batch_match_tasks_ai_sync(
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "deepseek-chat",
+                    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
                     "messages": [
                         {"role": "system", "content": "你是一个精确的任务匹配助手，只返回 JSON 数组格式结果。"},
                         {"role": "user", "content": prompt}
@@ -859,7 +859,7 @@ async def parse_daily_all_in_one(
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "deepseek-chat",
+                    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
                     "messages": [
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt}
