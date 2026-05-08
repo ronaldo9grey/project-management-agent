@@ -298,12 +298,8 @@ async def get_monthly_project_hours(
                     "total_hours": 0.0
                 }
             
-            # 统一精度：保留1位小数
-            hours_rounded = round(hours, 1)
-            official_hours[project_name]["members"][emp_name] = round(
-                official_hours[project_name]["members"].get(emp_name, 0.0) + hours_rounded, 1
-            )
-            official_hours[project_name]["total_hours"] = round(official_hours[project_name]["total_hours"] + hours_rounded, 1)
+            official_hours[project_name]["members"][emp_name] = official_hours[project_name]["members"].get(emp_name, 0.0) + hours
+            official_hours[project_name]["total_hours"] = official_hours[project_name]["total_hours"] + hours
         
         # 查询未匹配项目的工时数据
         other_result = conn.execute(text("""
@@ -343,40 +339,44 @@ async def get_monthly_project_hours(
                     "total_hours": 0.0
                 }
             
-            # 统一精度：保留1位小数
-            hours_rounded = round(hours, 1)
-            other_work_hours[category_name]["members"][emp_name] = round(
-                other_work_hours[category_name]["members"].get(emp_name, 0.0) + hours_rounded, 1
-            )
-            other_work_hours[category_name]["total_hours"] = round(other_work_hours[category_name]["total_hours"] + hours_rounded, 1)
+            other_work_hours[category_name]["members"][emp_name] = other_work_hours[category_name]["members"].get(emp_name, 0.0) + hours
+            other_work_hours[category_name]["total_hours"] = other_work_hours[category_name]["total_hours"] + hours
         
-        # 计算员工小计（统一精度）
+        # 计算员工小计（使用原始精度累加）
         official_employee_totals_raw = {}
         for proj in official_hours.values():
             for emp, hours in proj["members"].items():
                 official_employee_totals_raw[emp] = official_employee_totals_raw.get(emp, 0.0) + hours
         official_employee_totals = {k: round(v, 1) for k, v in official_employee_totals_raw.items()}
-        official_grand_total = round(sum(official_employee_totals.values()), 1)
+        official_grand_total = round(sum(official_employee_totals_raw.values()), 1)
         
         other_employee_totals_raw = {}
         for proj in other_work_hours.values():
             for emp, hours in proj["members"].items():
                 other_employee_totals_raw[emp] = other_employee_totals_raw.get(emp, 0.0) + hours
         other_employee_totals = {k: round(v, 1) for k, v in other_employee_totals_raw.items()}
-        other_grand_total = round(sum(other_employee_totals.values()), 1)
+        other_grand_total = round(sum(other_employee_totals_raw.values()), 1)
         
         all_employee_totals_raw = {}
         for emp in all_employees:
-            all_employee_totals_raw[emp] = official_employee_totals.get(emp, 0.0) + other_employee_totals.get(emp, 0.0)
+            all_employee_totals_raw[emp] = official_employee_totals_raw.get(emp, 0.0) + other_employee_totals_raw.get(emp, 0.0)
         all_employee_totals = {k: round(v, 1) for k, v in all_employee_totals_raw.items()}
         
-        grand_total = round(official_grand_total + other_grand_total, 1)
+        grand_total = round(sum(official_employee_totals_raw.values()) + sum(other_employee_totals_raw.values()), 1)
         
-        # 转换为列表并排序
-        official_list = list(official_hours.values())
+        # 转换为列表并排序（显示时round）
+        official_list = []
+        for proj_data in official_hours.values():
+            proj_data["total_hours"] = round(proj_data["total_hours"], 1)
+            proj_data["members"] = {k: round(v, 1) for k, v in proj_data["members"].items()}
+            official_list.append(proj_data)
         official_list.sort(key=lambda x: x["total_hours"], reverse=True)
         
-        other_list = list(other_work_hours.values())
+        other_list = []
+        for proj_data in other_work_hours.values():
+            proj_data["total_hours"] = round(proj_data["total_hours"], 1)
+            proj_data["members"] = {k: round(v, 1) for k, v in proj_data["members"].items()}
+            other_list.append(proj_data)
         other_list.sort(key=lambda x: {
             "项目类": 0,
             "行政类": 1,
