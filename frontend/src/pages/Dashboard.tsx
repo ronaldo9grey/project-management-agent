@@ -914,6 +914,17 @@ export default function DashboardPage() {
 
   // 导出Excel
   const handleExportExcel = async () => {
+    // 添加确认对话框
+    const confirmed = await confirm({
+      title: '导出工时统计',
+      message: `确定要导出 ${selectedYear}年${selectedMonth}月 的工时统计数据吗？`,
+      confirmText: '确认导出',
+      cancelText: '取消',
+      type: 'info'
+    })
+    
+    if (!confirmed) return
+    
     try {
       showToast('正在生成Excel...', 'info')
       const blob = await api.exportMonthlyEmployeeHours(selectedYear, selectedMonth)

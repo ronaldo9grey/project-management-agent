@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 import io
+import calendar
 
 # 使用相对导入
 from ..database import get_connection, text
@@ -16,6 +17,42 @@ from ..logger import get_logger
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/agent/stats", tags=["统计"])
+
+
+def calculate_working_days(year: int, month: int) -> int:
+    """
+    计算指定月份的实际工作日数（考虑节假日）
+    
+    2026年特殊节假日：
+    - 清明节：4月6日
+    - 广西三月三：4月17日、4月20日
+    
+    返回工作日天数
+    """
+    cal = calendar.Calendar()
+    
+    # 所有日期
+    all_days = [d for d in cal.itermonthdates(year, month) if d.month == month]
+    
+    # 周末（周六=5，周日=6）
+    weekends = [d for d in all_days if d.weekday() >= 5]
+    
+    # 节假日（根据年份月份动态返回）
+    holidays = []
+    if year == 2026 and month == 4:
+        holidays = [
+            datetime(2026, 4, 6).date(),   # 清明节
+            datetime(2026, 4, 17).date(),  # 三月三
+            datetime(2026, 4, 20).date(),  # 三月三
+        ]
+    
+    # 休息日（去重）
+    rest_days = set(weekends) | set(holidays)
+    
+    # 工作日
+    work_days = [d for d in all_days if d not in rest_days]
+    
+    return len(work_days)
 
 
 def classify_other_work(work_content: str, project_name: str) -> str:
@@ -163,8 +200,8 @@ async def get_monthly_employee_hours(
     month_start = datetime(year, month, 1).date()
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
     
-    # 计算工作日数（简化：假设每月22个工作日）
-    working_days = 22
+    # 动态计算工作日数（考虑节假日）
+    working_days = calculate_working_days(year, month)
     
     with get_connection() as conn:
         # 查询所有员工的工时数据
@@ -253,6 +290,9 @@ async def get_monthly_project_hours(
     
     month_start = datetime(year, month, 1).date()
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    
+    # 动态计算工作日数（考虑节假日）
+    working_days = calculate_working_days(year, month)
     
     with get_connection() as conn:
         # 查询正式项目的工时数据
