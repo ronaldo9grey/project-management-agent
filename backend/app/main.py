@@ -2595,6 +2595,9 @@ async def get_team_work_hours(current_user: Dict = Depends(get_current_user)):
         return result_list
 
 
+# 导入节假日计算模块
+from .holidays import calculate_working_days
+
 @app.get("/api/agent/stats/monthly-employee-hours")
 async def get_monthly_employee_hours(
     year: int = None,
@@ -2622,53 +2625,8 @@ async def get_monthly_employee_hours(
     month_start = datetime(year, month, 1).date()
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
-    # 计算当月工作日数（排除周末+法定节假日）
-    # 2026年广西法定节假日（特殊处理）：
-    # - 清明：4月4-6日（周六-周一，3天）
-    # - 三月三：4月17日（周五）、4月20日（周一）补休，共4天
-    #   （4月18-19日周六周日本来就是周末）
-    # - 劳动节：5月1-5日，5月9日（周六）补班
-    # - 端午：6月20-22日
-    guangxi_holidays_2026 = {
-        # 清明节
-        (2026, 4, 4), (2026, 4, 5), (2026, 4, 6),
-        # 三月三（调休）
-        (2026, 4, 17), (2026, 4, 20),
-        # 劳动节
-        (2026, 5, 1), (2026, 5, 2), (2026, 5, 3), (2026, 5, 4), (2026, 5, 5),
-        # 端午节
-        (2026, 6, 20), (2026, 6, 21), (2026, 6, 22),
-        # 中秋节
-        (2026, 9, 25), (2026, 9, 26), (2026, 9, 27),
-        # 国庆节
-        (2026, 10, 1), (2026, 10, 2), (2026, 10, 3), (2026, 10, 4),
-        (2026, 10, 5), (2026, 10, 6), (2026, 10, 7), (2026, 10, 8),
-    }
-    
-    # 调休补班日（周末需要上班）
-    guangxi_workdays_2026 = {
-        # 劳动节调休
-        (2026, 5, 9),   # 周六补班
-    }
-    
-    working_days = 0
-    current = month_start
-    while current <= month_end:
-        weekday = current.weekday()  # 0=周一, 6=周日
-        date_tuple = (current.year, current.month, current.day)
-        
-        # 检查是否为工作日
-        if date_tuple in guangxi_workdays_2026:
-            # 调休补班日，算工作日
-            working_days += 1
-        elif date_tuple in guangxi_holidays_2026:
-            # 法定节假日，不算工作日
-            pass
-        elif weekday < 5:  # 周一到周五
-            working_days += 1
-        # 周末不算工作日
-        
-        current += timedelta(days=1)
+    # 动态计算工作日（使用holidays模块）
+    working_days = calculate_working_days(year, month)
 
     with get_connection() as conn:
         # 查询每个员工实际填写的日报天数（去重）
@@ -2926,6 +2884,10 @@ async def get_monthly_project_hours(
     month = month or today.month
 
     month_start = datetime(year, month, 1).date()
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+
+    # 动态计算工作日（使用holidays模块）
+    working_days = calculate_working_days(year, month)
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
     with get_connection() as conn:
