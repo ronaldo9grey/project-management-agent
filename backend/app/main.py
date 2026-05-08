@@ -2684,6 +2684,7 @@ async def get_monthly_employee_hours(
                     "employee_name": emp_name,
                     "projects": [],
                     "total_hours": 0,
+                    "total_hours_raw": 0,  # 原始精度累加
                     "report_count": 0,
                     "required_days": working_days,
                     "filled_days": employee_days.get(emp_name, 0),
@@ -2694,18 +2695,20 @@ async def get_monthly_employee_hours(
                 "project_name": project_name,
                 "hours": round(hours, 1)
             })
-            employee_hours[emp_name]["total_hours"] += hours
+            # 统一：累加原始值，最后统一round
+            employee_hours[emp_name]["total_hours_raw"] += hours  # 累加原始精度
             employee_hours[emp_name]["report_count"] += report_count
 
         # 转为列表并计算百分比
         result_list = []
         total_hours_raw = 0  # 累加原始精度工时
         for emp_data in employee_hours.values():
-            total = emp_data["total_hours"]
+            total_raw = emp_data["total_hours_raw"]
+            total = round(total_raw, 1)  # 每人总工时round
             for proj in emp_data["projects"]:
                 proj["percent"] = round(100 * proj["hours"] / total, 1) if total > 0 else 0
-            emp_data["total_hours"] = round(total, 1)
-            total_hours_raw += total  # 累加原始精度
+            emp_data["total_hours"] = total
+            total_hours_raw += total_raw  # 累加原始精度
             result_list.append(emp_data)
 
         # 按总工时排序
@@ -2719,7 +2722,7 @@ async def get_monthly_employee_hours(
             "working_days": working_days,  # 当月工作日数
             "employee_count": len(result_list),  # 参与人数
             "employees": result_list,
-            "total_hours": round(total_hours_raw, 1),  # 统一四舍五入
+            "total_hours": round(total_hours_raw, 1),  # 总工时统一round
             "total_reports": sum(e["report_count"] for e in result_list)
         }
 
