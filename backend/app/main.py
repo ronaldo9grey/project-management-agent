@@ -2992,36 +2992,36 @@ async def get_monthly_project_hours(
             other_work_hours[category_name]["members"][emp_name] = other_work_hours[category_name]["members"].get(emp_name, 0) + hours
             other_work_hours[category_name]["total_hours"] += hours
 
-        # 转为列表并排序
+        # 转为列表并排序（保留原始精度）
         official_list = []
-        official_employee_totals: Dict[str, float] = {}
-        official_employee_totals_raw: Dict[str, float] = {}  # 原始精度
+        official_employee_totals_raw: Dict[str, float] = {}
         
-        for proj_data in official_project_hours.values():
+        for proj_name, proj_data in official_project_hours.items():
             # 累加原始精度工时到员工汇总
             for emp, hours in proj_data["members"].items():
                 official_employee_totals_raw[emp] = official_employee_totals_raw.get(emp, 0) + hours
-            # 显示时四舍五入
-            proj_data["total_hours"] = round(proj_data["total_hours"], 1)
+            # 累加原始精度到项目总工时
+            proj_total_raw = proj_data["total_hours"]
+            proj_data["total_hours"] = round(proj_total_raw, 1)
             proj_data["members"] = {k: round(v, 1) for k, v in proj_data["members"].items()}
             official_list.append(proj_data)
         
         official_list.sort(key=lambda x: x["total_hours"], reverse=True)
-        # 统一四舍五入
+        # 使用原始精度计算员工总工时，最后统一round
         official_employee_totals = {k: round(v, 1) for k, v in sorted(official_employee_totals_raw.items(), key=lambda x: x[1], reverse=True)}
         official_grand_total = round(sum(official_employee_totals_raw.values()), 1)
         
-        # 其他工作列表
+        # 其他工作列表（保留原始精度）
         other_list = []
-        other_employee_totals: Dict[str, float] = {}
-        other_employee_totals_raw: Dict[str, float] = {}  # 原始精度
+        other_employee_totals_raw: Dict[str, float] = {}
         
-        for proj_data in other_work_hours.values():
+        for proj_name, proj_data in other_work_hours.items():
             # 累加原始精度工时到员工汇总
             for emp, hours in proj_data["members"].items():
                 other_employee_totals_raw[emp] = other_employee_totals_raw.get(emp, 0) + hours
-            # 显示时四舍五入
-            proj_data["total_hours"] = round(proj_data["total_hours"], 1)
+            # 累加原始精度到项目总工时
+            proj_total_raw = proj_data["total_hours"]
+            proj_data["total_hours"] = round(proj_total_raw, 1)
             proj_data["members"] = {k: round(v, 1) for k, v in proj_data["members"].items()}
             other_list.append(proj_data)
         
@@ -3031,7 +3031,7 @@ async def get_monthly_project_hours(
             "会议类": 2,
             "日常类": 3
         }.get(x["project_name"], 4))
-        # 统一四舍五入
+        # 使用原始精度计算员工总工时，最后统一round
         other_employee_totals = {k: round(v, 1) for k, v in sorted(other_employee_totals_raw.items(), key=lambda x: x[1], reverse=True)}
         other_grand_total = round(sum(other_employee_totals_raw.values()), 1)
         
@@ -3045,13 +3045,10 @@ async def get_monthly_project_hours(
         
         grand_total = round(sum(official_employee_totals_raw.values()) + sum(other_employee_totals_raw.values()), 1)
         
-        # 计算工作日（简化：每月22个工作日）
-        working_days = 22
-
         return {
             "year": year,
             "month": month,
-            "working_days": working_days,  # 月份总工作日
+            "working_days": working_days,  # 月份总工作日（动态计算）
             "employee_count": len(all_employees),  # 参与人数
             "official_projects": official_list,
             "official_employee_totals": official_employee_totals,
