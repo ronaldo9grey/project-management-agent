@@ -1,6 +1,8 @@
 """
 看板相关API路由
 包括：今日聚焦、风险预警、项目看板等
+
+注意：insight 端点保留在 main.py 中（依赖AI调用）
 """
 from fastapi import APIRouter, Depends
 from typing import Dict, List
@@ -239,106 +241,6 @@ async def get_risk_matrix(current_user: Dict = Depends(get_current_user)):
         return {"matrix": matrix}
 
 
-@router.get("/overview")
-async def get_dashboard_overview(current_user: Dict = Depends(get_current_user)):
-    """获取看板概览"""
-    today = datetime.now().date()
-    
-    with get_connection() as conn:
-        # 项目统计
-        projects_result = conn.execute(text("""
-            SELECT 
-                COUNT(*) FILTER (WHERE status = '进行中') as ongoing,
-                COUNT(*) FILTER (WHERE status = '已完成') as completed,
-                COUNT(*) as total
-            FROM projects
-            WHERE is_deleted = false
-        """))
-        proj_row = projects_result.fetchone()
-        
-        # 成本统计
-        cost_result = conn.execute(text("""
-            SELECT 
-                COALESCE(SUM(total_budget_cost), 0) as total_budget,
-                COALESCE(SUM(total_actual_cost), 0) as total_actual
-            FROM projects
-            WHERE is_deleted = false
-        """))
-        cost_row = cost_result.fetchone()
-        
-        return {
-            "stats": {
-                "ongoing_projects": int(proj_row[0] or 0),
-                "completed_projects": int(proj_row[1] or 0),
-                "total_projects": int(proj_row[2] or 0),
-                "total_budget": float(cost_row[0] or 0),
-                "total_actual": float(cost_row[1] or 0)
-            }
-        }
+# 注意：overview 和 projects 端点保留在 main.py 中（包含完整的项目时间线数据）
+# 注意：insight 端点保留在 main.py 中（依赖 AI 调用和数据库存储）
 
-
-@router.get("/projects")
-async def get_dashboard_projects(current_user: Dict = Depends(get_current_user)):
-    """获取看板项目列表"""
-    username = current_user.get("username")
-    role_id = current_user.get("role_id")
-    
-    with get_connection() as conn:
-        if role_id == 11:  # 管理员
-            result = conn.execute(text("""
-                SELECT id, name, leader, status, progress, start_date, end_date
-                FROM projects
-                WHERE is_deleted = false
-                ORDER BY progress DESC, end_date
-            """))
-        else:
-            emp_result = conn.execute(text("""
-                SELECT name FROM personnel WHERE employee_id = :emp_id
-            """), {"emp_id": username})
-            emp_row = emp_result.fetchone()
-            employee_name = emp_row[0] if emp_row else username
-            
-            result = conn.execute(text("""
-                SELECT id, name, leader, status, progress, start_date, end_date
-                FROM projects
-                WHERE leader = :emp_name AND is_deleted = false
-                ORDER BY progress DESC, end_date
-            """), {"emp_name": employee_name})
-        
-        projects = []
-        for row in result:
-            projects.append({
-                "id": row[0],
-                "name": row[1],
-                "leader": row[2],
-                "status": row[3],
-                "progress": float(row[4] or 0),
-                "start_date": str(row[5]) if row[5] else None,
-                "end_date": str(row[6]) if row[6] else None
-            })
-        
-        return projects
-
-
-@router.get("/insight")
-async def get_dashboard_insight(current_user: Dict = Depends(get_current_user)):
-    """获取AI洞察"""
-    # 简化版：返回基础信息
-    today = datetime.now().date()
-    
-    with get_connection() as conn:
-        result = conn.execute(text("""
-            SELECT COUNT(*) FILTER (WHERE end_date < CURRENT_DATE AND progress < 100) as delayed_count
-            FROM project_tasks
-            WHERE is_latest = true AND is_deleted = false
-        """))
-        row = result.fetchone()
-        delayed_count = int(row[0] or 0)
-    
-    insights = [f"今日日期: {today}"]
-    if delayed_count > 0:
-        insights.append(f"⚠️ 当前有 {delayed_count} 个任务延期")
-    else:
-        insights.append("✅ 暂无延期任务")
-    
-    return {"content": "\n".join(insights)}

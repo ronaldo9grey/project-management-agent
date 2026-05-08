@@ -76,9 +76,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # 注册路由模块（拆分计划）
+# 注意：overview、projects、insight 端点保留在 main.py 中（包含完整数据）
 app.include_router(health_router)  # health路由
 app.include_router(stats_router)   # stats路由
-app.include_router(dashboard_router)  # dashboard路由
+# dashboard路由暂时禁用（避免覆盖完整版端点）
+# app.include_router(dashboard_router)
 
 # 配置
 class Settings:
