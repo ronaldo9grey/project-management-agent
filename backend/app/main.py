@@ -14,6 +14,9 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+# 路由模块（拆分计划）- 使用相对导入
+from .routes.health import router as health_router
+
 # LangChain imports
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, END
@@ -69,6 +72,9 @@ app.add_middleware(
 # 加载环境变量
 from dotenv import load_dotenv
 load_dotenv()
+
+# 注册路由模块（拆分计划）
+app.include_router(health_router)  # health路由
 
 # 配置
 class Settings:
@@ -1106,15 +1112,7 @@ daily_workflow.add_edge("match_tasks", END)
 daily_agent = daily_workflow.compile()
 
 # ============== API路由 ==============
-
-@app.get("/health")
-async def health_check():
-    """健康检查"""
-    return {
-        "status": "ok",
-        "timestamp": datetime.now().isoformat(),
-        "backend_url": settings.BACKEND_API_URL
-    }
+# 注：health 端点已迁移至 routes/health.py
 
 # ============== 新增：智能解析代理接口 ==============
 
@@ -9450,3 +9448,11 @@ async def get_project_improvements(
         logger.exception(f"获取改进措施失败: {e}")
         return {"success": False, "error": str(e)}
 
+
+
+# ============== 注册模块化路由 ==============
+# 注意：这是拆分计划的一部分，路由模块独立于上面定义的端点
+# 注册后会与原端点共存，待测试通过后再移除原端点
+
+# from routes import auth
+# app.include_router(auth.router)
