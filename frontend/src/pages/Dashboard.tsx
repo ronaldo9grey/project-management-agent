@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import SharedHeader from '../components/SharedHeader'
 import { redirectToLogin } from '../utils/auth'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
@@ -981,16 +982,7 @@ export default function DashboardPage() {
   if (isLoading) {
     return (
       <div className="page-container">
-        <header className="header">
-          <div className="header-content">
-            <div className="header-left">
-              <Link to="/" className="header-logo">
-                <span className="text-xl">⚙️</span>
-                <span>项目管家</span>
-              </Link>
-            </div>
-          </div>
-        </header>
+      <SharedHeader />
         <main className="content-wrapper">
           {/* 骨架屏 */}
           <div className="skeleton skeleton-text mb-6" style={{ width: '150px', height: '28px' }} />

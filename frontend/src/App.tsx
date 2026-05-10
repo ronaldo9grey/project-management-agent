@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import HomePage from './pages/Home'
 import DashboardPage from './pages/Dashboard'
 import DailyPage from './pages/Daily'
@@ -12,10 +12,10 @@ import WeeklyReportPage from './pages/WeeklyReport'
 import TrackingPage from './pages/Tracking'
 import QualityPage from './pages/Quality'
 import ReportPage from './pages/Report'
+import ResearchPage from './pages/Research'
 import LoginPage from './pages/Login'
 import { ToastProvider } from './components/Toast'
 import { ConfirmProvider } from './components/ConfirmDialog'
-import { isAuthenticated } from './utils/auth'
 import { useAppStore } from './store'
 
 // 路由变化时取消未完成的请求
@@ -37,16 +37,6 @@ function RouteChangeListener() {
   }, [location.pathname])
   
   return null
-}
-
-// 心跳保活 - 已禁用
-// 原因：刷新页面时心跳请求被取消，可能导致连接重置
-// 如果用户长时间停留后连接断开，再考虑重新启用
-function useHeartbeat() {
-  // 暂时禁用
-  // const token = useAppStore(state => state.token)
-  // const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  // ... 心跳逻辑已禁用
 }
 
 function App() {
@@ -75,14 +65,66 @@ function App() {
 
 // 认证保护组件
 function ProtectedRoutes() {
-  // 启动心跳保活
-  useHeartbeat()
+  const token = useAppStore(state => state.token)
   const user = useAppStore(state => state.user)
-  const userRoleId = user?.role_id || 13
+  const [isHydrated, setIsHydrated] = useState(false)
   
-  if (!isAuthenticated()) {
+  // 等待 zustand persist 水合完成
+  useEffect(() => {
+    const unsubscribe = useAppStore.persist.onFinishHydration(() => {
+      setIsHydrated(true)
+    })
+    
+    // 如果已经水合完成，直接设置
+    if (useAppStore.persist.hasHydrated()) {
+      setIsHydrated(true)
+    }
+    
+    return unsubscribe
+  }, [])
+  
+  // 水合未完成时显示加载
+  if (!isHydrated) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '16px',
+        color: '#6b7280'
+      }}>
+        <span className="spinner" style={{
+          width: '24px',
+          height: '24px',
+          border: '3px solid #e5e7eb',
+          borderTopColor: '#3b82f6',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite',
+          marginRight: '12px'
+        }}></span>
+        加载中...
+      </div>
+    )
+  }
+  
+  // 检查 token 是否有效
+  if (!token) {
     return <Navigate to="/login" replace />
   }
+  
+  // 检查 token 是否过期
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    const exp = payload.exp * 1000
+    if (Date.now() >= exp) {
+      return <Navigate to="/login" replace />
+    }
+  } catch {
+    return <Navigate to="/login" replace />
+  }
+  
+  const userRoleId = user?.role_id || 13
   
   // 看板角色(role_id=17)只能访问看板页面
   if (userRoleId === 17) {
@@ -108,6 +150,7 @@ function ProtectedRoutes() {
       <Route path="/tracking" element={<TrackingPage />} />
       <Route path="/quality" element={<QualityPage />} />
       <Route path="/system-report" element={<ReportPage />} />
+      <Route path="/research" element={<ResearchPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

@@ -851,7 +851,7 @@ async def parse_daily_all_in_one(
         url = "https://api.deepseek.com/v1/chat/completions"
         ai_logger.info(f"一次性解析日报，项目数: {len(projects)}, 输入长度: {len(user_input)}")
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 url,
                 headers={

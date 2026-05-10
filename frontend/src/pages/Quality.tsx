@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import SharedHeader from '../components/SharedHeader'
 import { Link } from 'react-router-dom'
 import { useAppStore } from '../store'
 import MobileNav from '../components/MobileNav'
@@ -280,57 +281,7 @@ export default function QualityPage() {
       {tipsModal && <TipsModal title={tipsModal.title} content={tipsModal.content} onClose={() => setTipsModal(null)} />}
 
       {/* 顶部导航 - PC端 */}
-      <header className="header" style={{ display: isMobile ? 'none' : 'block' }}>
-        <div className="header-content">
-          <div className="header-left">
-            <Link to="/" className="header-logo">
-              <span className="text-xl">⚙️</span>
-              <span className="header-title">项目管家</span>
-            </Link>
-            <nav className="header-nav">
-              <Link to="/" className="nav-link">个人</Link>
-              <Link to="/daily" className="nav-link">日报</Link>
-              <Link to="/projects" className="nav-link">项目</Link>
-              <Link to="/tracking" className="nav-link">追踪</Link>
-              <Link to="/quality" className="nav-link active">质量</Link>
-              <Link to="/dashboard" className="nav-link">看板</Link>
-            </nav>
-          </div>
-          <div className="header-right">
-            <div className="user-menu-wrapper" style={{ position: 'relative' }}>
-              <div 
-                className="user-info"
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-              >
-                <div className="user-avatar">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
-                <span className="user-name">{user?.name || '用户'}</span>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-              {showUserMenu && (
-                <div className="user-dropdown">
-                  <div className="user-dropdown-header">
-                    <div className="user-avatar-lg">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
-                    <div>
-                      <div style={{ fontWeight: 500, color: '#1f2937' }}>{user?.name || '用户'}</div>
-                      {user?.department && <div style={{ fontSize: 12, color: '#6b7280' }}>{user.department}</div>}
-                    </div>
-                  </div>
-                  <div className="user-dropdown-divider" />
-                  <button className="user-dropdown-item" onClick={handleLogout}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    退出登录
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <SharedHeader />
 
       {/* 顶部标题 - 移动端 */}
       <header style={{ 

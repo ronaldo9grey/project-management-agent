@@ -18,6 +18,7 @@ from slowapi.errors import RateLimitExceeded
 from .routes.health import router as health_router
 from .routes.stats import router as stats_router
 from .routes.dashboard import router as dashboard_router
+from .routes.research import router as research_router
 
 # LangChain imports
 from langchain_openai import ChatOpenAI
@@ -79,6 +80,7 @@ load_dotenv()
 # 注意：overview、projects、insight 端点保留在 main.py 中（包含完整数据）
 app.include_router(health_router)  # health路由
 app.include_router(stats_router)   # stats路由
+app.include_router(research_router) # 研发项目工时归集路由
 # dashboard路由暂时禁用（避免覆盖完整版端点）
 # app.include_router(dashboard_router)
 
@@ -155,7 +157,8 @@ def verify_token(token: str) -> Optional[Dict]:
         username: str = payload.get("sub")
         if username is None:
             return None
-        return {"username": username, "user_id": payload.get("user_id")}
+        # 返回 sub 字段，保持一致性
+        return {"sub": username, "user_id": payload.get("user_id")}
     except JWTError:
         return None
 
@@ -188,7 +191,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
     if payload is None:
         raise credentials_exception
     
-    # 获取用户信息，补充 employee_id
+    logger.debug(f"verify_token 返回: {payload}")
+    
+    # 获取用户信息，补充 employee_id, name, role_id
     username = payload.get("sub")
     if username:
         # 从数据库查询用户信息（绕过缓存）
@@ -196,28 +201,42 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
             from dotenv import load_dotenv
             load_dotenv()
             with get_connection() as conn:
+                logger.debug(f"查询用户信息: username={username}")
                 result = conn.execute(text("""
-                    SELECT employee_id, name, department, position
-                    FROM personnel WHERE employee_id = :username
+                    SELECT p.employee_id, p.name, p.department, p.position, 
+                           COALESCE(p.role_id, u.role_id, 13) as role_id
+                    FROM personnel p
+                    LEFT JOIN users u ON u.username = p.employee_id
+                    WHERE p.employee_id = :username
                 """), {"username": username}).fetchone()
+                
+                logger.debug(f"数据库查询结果: {result}")
                 
                 if result:
                     payload["employee_id"] = result[0] or username
                     payload["name"] = result[1] or ""
                     payload["department"] = result[2] or ""
                     payload["position"] = result[3] or ""
+                    payload["role_id"] = result[4] or 13
                 else:
+                    logger.warning(f"用户 {username} 不存在于 personnel 表")
                     # 用户不存在于 personnel 表，使用默认值
                     payload["employee_id"] = username
                     payload["name"] = username
+                    payload["role_id"] = 13
         except Exception as e:
-            logger.warning(f"获取用户信息失败: {e}")
+            logger.error(f"获取用户信息失败: {e}")
             payload["employee_id"] = username
+            payload["role_id"] = 13
 
     # 确保 employee_id 存在
     if "employee_id" not in payload:
         payload["employee_id"] = username
+    
+    if "role_id" not in payload:
+        payload["role_id"] = 13
 
+    logger.debug(f"get_current_user 返回: {payload}")
     return payload
 
 async def get_user_info(token: str) -> Dict:
@@ -240,6 +259,17 @@ async def get_user_info(token: str) -> Dict:
             employee_id = user_data.get("employee_id") or user_data.get("username")
             if employee_id:
                 with get_connection() as conn:
+                    # 从 users 表获取 role_id
+                    user_result = conn.execute(text("""
+                        SELECT role_id FROM users WHERE username = :employee_id
+                    """), {"employee_id": employee_id}).fetchone()
+                    
+                    if user_result and user_result[0]:
+                        user_data["role_id"] = user_result[0]
+                    else:
+                        user_data["role_id"] = 13  # 默认普通用户
+                    
+                    # 从 personnel 表获取其他信息
                     person_result = conn.execute(text("""
                         SELECT name, department, position, phone, email
                         FROM personnel
@@ -253,45 +283,53 @@ async def get_user_info(token: str) -> Dict:
                         user_data["phone"] = person_result[3] or ""
                         user_data["email"] = person_result[4] or ""
             
-            logger.info(f": employee_id={user_data.get('employee_id')}, name={user_data.get('name')}, department={user_data.get('department')}, position={user_data.get('position')}")
+            logger.info(f": employee_id={user_data.get('employee_id')}, name={user_data.get('name')}, role_id={user_data.get('role_id')}")
             return user_data
         return {}
     except Exception as e:
         logger.error(f" {e}")
         return {}
 
+async def check_project_edit_permission(project_id: int, user_info: Dict) -> bool:
+    """检查用户是否有项目编辑权限（项目负责人或管理员）"""
+    role_id = user_info.get("role_id")
+    employee_name = user_info.get("name", "")
+    
+    logger.debug(f"权限检查: project_id={project_id}, role_id={role_id}, name={employee_name}")
+    
+    # 管理员有权限
+    if role_id == 11:
+        logger.debug("管理员权限通过")
+        return True
+    
+    # 检查是否是项目负责人
+    with get_connection() as conn:
+        result = conn.execute(text("""
+            SELECT leader FROM projects WHERE id = :pid AND is_deleted = false
+        """), {"pid": project_id})
+        row = result.fetchone()
+        if row:
+            leader = row[0]
+            logger.debug(f"项目leader={leader}, user={employee_name}")
+            if leader == employee_name:
+                logger.debug("负责人权限通过")
+                return True
+    
+    logger.debug("权限检查失败")
+    return False
+
+
 async def get_projects_with_auth(token: str, user_info: Dict = None) -> List[Dict]:
-    """获取项目列表，根据用户角色过滤，并计算进度"""
+    """获取项目列表（全员可见），并计算进度"""
     # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
     with get_connection() as conn:
-        # 判断用户角色
-        if user_info:
-            role_id = user_info.get("role_id")
-            employee_name = user_info.get("name", "")
-
-            # role_id=11 是系统管理员，可以看到所有项目
-            if role_id == 11:
-                logger.debug("管理员用户，返回所有项目")
-                result = conn.execute(text("""
-                    SELECT id, name, leader, status FROM projects
-                    WHERE is_deleted = false ORDER BY id
-                """))
-            else:
-                # 其他角色，只查询自己负责的项目
-                logger.debug(f"普通用户 {employee_name}，查询负责的项目")
-                result = conn.execute(text("""
-                    SELECT id, name, leader, status FROM projects
-                    WHERE is_deleted = false AND leader = :emp_name
-                    ORDER BY id
-                """), {"emp_name": employee_name})
-        else:
-            # 无用户信息，返回所有项目
-            result = conn.execute(text("""
-                SELECT id, name, leader, status FROM projects
-                WHERE is_deleted = false ORDER BY id
-            """))
+        # 全员可见所有项目
+        result = conn.execute(text("""
+            SELECT id, name, leader, status FROM projects
+            WHERE is_deleted = false ORDER BY id
+        """))
 
         # 计算每个项目的进度
         projects = []
@@ -1759,14 +1797,15 @@ async def get_current_user_info(current_user: Dict = Depends(get_current_user)):
         from dotenv import load_dotenv
         load_dotenv()
         with get_connection() as conn:
-            # 从 users 表获取基本信息
+            # 从 users 表获取基本信息（包含 role_id）
             result = conn.execute(text("""
-                SELECT id, username, role FROM users WHERE username = :username
+                SELECT id, username, role, role_id FROM users WHERE username = :username
             """), {"username": username}).fetchone()
 
             if result:
                 current_user["id"] = result[0]
                 current_user["role"] = result[2] or "user"
+                current_user["role_id"] = result[3] or 13  # 默认13（普通用户）
 
             # 从 personnel 表获取部门、岗位信息
             person_result = conn.execute(text("""
@@ -1927,15 +1966,26 @@ def require_role(allowed_roles: List[str]):
 
 
 @app.get("/api/agent/work-hours/stats")
-async def get_work_hours_stats(current_user: Dict = Depends(get_current_user)):
+async def get_work_hours_stats(current_user: Dict = Depends(get_current_user), request: Request = None):
     """
     获取工时统计数据
-
+    
+    【修复】不再从内存缓存获取 token，直接从请求 header 获取
+    
     返回：今日、本周、本月工时，项目工时分布
     """
-    username = current_user.get("username")
-    token = get_user_token(username)
-
+    username = current_user.get("username") or current_user.get("sub")
+    
+    # 【修复】从请求 header 获取 token（不再依赖内存缓存）
+    token = None
+    if request and request.headers.get("authorization"):
+        auth_header = request.headers.get("authorization")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    
+    if not token:
+        token = get_user_token(username)
+    
     if not token:
         raise HTTPException(status_code=401, detail="未找到用户认证信息")
 
@@ -2037,19 +2087,31 @@ async def get_work_hours_stats(current_user: Dict = Depends(get_current_user)):
 # ============== 今日聚焦看板 API ==============
 
 @app.get("/api/agent/dashboard/today-focus")
-async def get_today_focus(current_user: Dict = Depends(get_current_user)):
+async def get_today_focus(current_user: Dict = Depends(get_current_user), request: Request = None):
     """
     获取今日聚焦数据
-
+    
+    【修复】不再从内存缓存获取 token，直接从请求 header 获取
+    
     返回：
     - today_tasks: 今日待办任务
     - delayed_tasks: 延期任务
     - month_goals: 本月目标进度
     - daily_report_status: 日报填报状态
     """
-    username = current_user.get("username")
-    token = get_user_token(username)
-
+    username = current_user.get("username") or current_user.get("sub")
+    
+    # 【修复】从请求 header 获取 token（不再依赖内存缓存）
+    token = None
+    if request and request.headers.get("authorization"):
+        auth_header = request.headers.get("authorization")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # 去掉 "Bearer " 前缀
+    
+    if not token:
+        # 如果 header 中没有，尝试从 current_user 获取（兼容旧逻辑）
+        token = get_user_token(username)
+    
     if not token:
         raise HTTPException(status_code=401, detail="未找到用户认证信息")
 
@@ -4295,7 +4357,7 @@ async def update_project_task_status(
     current_user: Dict = Depends(get_current_user)
 ):
     """
-    更新项目所有任务状态（自动计算）
+    更新项目所有任务状态（仅项目负责人或管理员可操作）
 
     根据进度和时间自动计算任务状态：
     - 未开始：计划开始时间未到
@@ -4303,6 +4365,10 @@ async def update_project_task_status(
     - 延期：计划结束时间已过，进度 < 100%
     - 已完成：进度 >= 100%
     """
+    # 权限检查：只有项目负责人或管理员可以更新
+    if not await check_project_edit_permission(project_id, current_user):
+        raise HTTPException(status_code=403, detail="只有项目负责人或管理员可以更新任务状态")
+
     try:
         from .task_auto import get_latest_version_tasks, calculate_task_status
         # text 已从 database 模块导入
@@ -4391,20 +4457,12 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
         role_id = user_info.get("role_id")
         employee_name = user_info.get("name", "")
         
-        # 根据角色查询项目
-        if role_id == 11:  # 管理员
-            logger.debug(f"管理员用户 {employee_name}，返回所有项目")
-            result = conn.execute(text("""
-                SELECT id, name, leader, status, project_year FROM projects
-                WHERE is_deleted = false ORDER BY project_year DESC, id
-            """))
-        else:
-            logger.debug(f"普通用户 {employee_name}，查询负责的项目")
-            result = conn.execute(text("""
-                SELECT id, name, leader, status, project_year FROM projects
-                WHERE is_deleted = false AND leader = :emp_name
-                ORDER BY project_year DESC, id
-            """), {"emp_name": employee_name})
+        # 全员可见所有项目
+        logger.debug(f"用户 {employee_name} 查询所有项目")
+        result = conn.execute(text("""
+            SELECT id, name, leader, status, project_year FROM projects
+            WHERE is_deleted = false ORDER BY project_year DESC, id
+        """))
         
         # 计算每个项目的进度（工期加权，与详情页和看板统一）
         projects = []
@@ -4880,7 +4938,7 @@ async def upload_plan_excel(
     current_user: Dict = Depends(get_current_user)
 ):
     """
-    上传Excel计划并解析导入
+    上传Excel计划并解析导入（仅项目负责人或管理员可操作）
 
     Excel格式要求：
     - 第一行为表头
@@ -4888,8 +4946,15 @@ async def upload_plan_excel(
     - 可选列：负责人、开始日期、结束日期、工时、状态、备注
     """
     username = current_user.get("username")
-    token = get_user_token(username)
+    
+    # 调试日志：打印 current_user 结构
+    logger.debug(f"upload_plan_excel current_user: {current_user}")
 
+    # 权限检查：只有项目负责人或管理员可以上传（先检查权限，再获取token）
+    if not await check_project_edit_permission(project_id, current_user):
+        raise HTTPException(status_code=403, detail="只有项目负责人或管理员可以上传计划")
+    
+    token = get_user_token(username)
     if not token:
         raise HTTPException(status_code=401, detail="未找到用户认证信息")
 

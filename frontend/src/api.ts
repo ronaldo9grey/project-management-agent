@@ -1,7 +1,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig, type AxiosResponse, type CancelTokenSource } from 'axios'
 import { useAppStore } from './store'
 import { showToast } from './components/Toast'
-import { isTokenExpiringSoon, redirectToLogin } from './utils/auth'
+import { redirectToLogin } from './utils/auth'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/agent-api'
 
@@ -46,66 +46,46 @@ export const apiClient = axios.create({
   },
 })
 
-// Token 刷新相关
-let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
-let lastRefreshToken: string | null = null  // 记录上次刷新的 token
-let refreshAttempts = 0  // 刷新尝试次数
-const MAX_REFRESH_ATTEMPTS = 3  // 最大刷新尝试次数
-
-function subscribeTokenRefresh(callback: (token: string) => void) {
-  refreshSubscribers.push(callback)
-}
-
-function onTokenRefreshed(token: string) {
-  refreshSubscribers.forEach(callback => callback(token))
-  refreshSubscribers = []
-}
-
-// 请求拦截器 - 添加token + 自动刷新 + 请求取消
-apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
+// 请求拦截器 - 添加token（简化版，移除自动刷新避免并发问题）
+apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   // 添加取消令牌
   const requestKey = `${config.method}:${config.url}`
   const source = axios.CancelToken.source()
   config.cancelToken = source.token
   pendingRequests.set(requestKey, source)
   
-  const token = useAppStore.getState().token
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-    
-    // 检查是否需要刷新 token（排除刷新接口本身）
-    if (!config.url?.includes('/auth/refresh') && !config.url?.includes('/auth/login') && isTokenExpiringSoon()) {
-      // 检查刷新尝试次数
-      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
-        console.log('[Auth] 刷新尝试次数过多，跳过自动刷新')
-        return config
+  // 【关键】直接从 localStorage 读取 token（不用 try-catch，避免静默失败）
+  let token: string | null = null
+  const storage = localStorage.getItem('project-agent-storage')
+  if (storage) {
+    try {
+      const data = JSON.parse(storage)
+      token = data.state?.token || null
+      // 调试日志（生产环境可移除）
+      if (import.meta.env.DEV) {
+        console.log(`[Interceptor] ${config.url} - token from localStorage:`, token ? 'found' : 'not found')
       }
-      
-      try {
-        const res = await axios.post(`${API_BASE_URL}/api/agent/auth/refresh`, {}, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        const newToken = res.data.access_token
-        if (newToken) {
-          // 检查 token 是否真的变化了
-          if (newToken !== lastRefreshToken) {
-            // 更新 store 和 localStorage
-            useAppStore.getState().setToken(newToken)
-            config.headers.Authorization = `Bearer ${newToken}`
-            lastRefreshToken = newToken
-            refreshAttempts = 0  // 重置刷新尝试次数
-            console.log('[Auth] Token 自动刷新成功')
-          } else {
-            console.log('[Auth] Token 刷新后未变化')
-          }
-        }
-      } catch (e) {
-        console.warn('[Auth] Token 刷新失败，继续使用当前 token', e)
-        refreshAttempts++  // 增加刷新尝试次数
-      }
+    } catch (e) {
+      console.error('[Interceptor] Failed to parse localStorage:', e)
+    }
+  } else {
+    console.warn('[Interceptor] No localStorage data found for', config.url)
+  }
+  
+  // 如果 localStorage 没有，再从 store 读取（兜底）
+  if (!token) {
+    token = useAppStore.getState().token
+    if (import.meta.env.DEV) {
+      console.log(`[Interceptor] ${config.url} - token from store:`, token ? 'found' : 'not found')
     }
   }
+  
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  } else {
+    console.error(`[Interceptor] ${config.url} - NO TOKEN AVAILABLE!`)
+  }
+  
   return config
 })
 
@@ -135,7 +115,6 @@ apiClient.interceptors.response.use(
     
     // 排除登录接口的 401 处理
     const isLoginRequest = error.config?.url?.includes('/auth/login')
-    const isRefreshRequest = error.config?.url?.includes('/auth/refresh')
     
     // 网络错误（ERR_CONNECTION_RESET 等）优先重试
     if (!error.response && (originalRequest._retry === undefined || originalRequest._retry < MAX_RETRY)) {
@@ -167,68 +146,11 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
     
-    // 401 认证错误处理
+    // 401 认证错误处理（简化版：直接跳转登录页）
     if (error.response?.status === 401 && !isLoginRequest) {
-      // 如果是刷新接口 401，说明 token 完全失效
-      if (isRefreshRequest) {
-        console.log('[Auth] Token 刷新失败，需要重新登录')
-        redirectToLogin()
-        return Promise.reject(error)
-      }
-      
-      // 检查刷新尝试次数
-      if (refreshAttempts >= MAX_REFRESH_ATTEMPTS) {
-        console.log('[Auth] 刷新尝试次数过多，停止重试')
-        redirectToLogin()
-        return Promise.reject(error)
-      }
-      
-      // 尝试刷新 token
-      if (!isRefreshing) {
-        isRefreshing = true
-        refreshAttempts++  // 增加刷新尝试次数
-        try {
-          const token = useAppStore.getState().token
-          const res = await axios.post(`${API_BASE_URL}/api/agent/auth/refresh`, {}, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-          const newToken = res.data.access_token
-          if (newToken) {
-            // 检查 token 是否真的变化了
-            if (newToken === lastRefreshToken) {
-              console.log('[Auth] Token 未变化，刷新无效')
-              redirectToLogin()
-              isRefreshing = false
-              return Promise.reject(new Error('Token refresh ineffective'))
-            }
-            
-            lastRefreshToken = newToken
-            useAppStore.getState().setToken(newToken)
-            onTokenRefreshed(newToken)
-            isRefreshing = false
-            
-            // 重置刷新尝试次数（成功刷新后）
-            refreshAttempts = 0
-            
-            // 重试原请求
-            originalRequest.headers.Authorization = `Bearer ${newToken}`
-            return apiClient(originalRequest)
-          }
-        } catch (refreshError) {
-          isRefreshing = false
-          console.log('[Auth] Token 刷新失败')
-          redirectToLogin()
-          return Promise.reject(refreshError)
-        }
-      } else {
-        // 正在刷新，等待刷新完成后重试
-        return new Promise((resolve) => {
-          subscribeTokenRefresh((newToken: string) => {
-            originalRequest.headers.Authorization = `Bearer ${newToken}`
-            resolve(apiClient(originalRequest))
-          })
-        })
-      }
+      console.log('[Auth] Token 无效，跳转登录页')
+      redirectToLogin()
+      return Promise.reject(error)
     }
     
     // 服务器错误提示

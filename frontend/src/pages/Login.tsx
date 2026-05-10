@@ -1,10 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api'
 import { useAppStore } from '../store'
 
 export default function LoginPage() {
-  const navigate = useNavigate()
   const { setToken, setUser } = useAppStore()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -89,14 +87,24 @@ export default function LoginPage() {
           } catch {}
         }
         
-        // 更新 zustand store（会自动同步到 localStorage）
+        // 更新 zustand store
         setToken(result.access_token)
         setUser(userData)
         
-        // 等待状态更新完成后再导航
-        setTimeout(() => {
-          navigate('/')
-        }, 100)
+        // 【关键】立即同步写入 localStorage，确保水合时能读到正确的值
+        const storageData = {
+          state: {
+            user: userData,
+            token: result.access_token,
+            currentProject: null,
+            dailyDraft: null
+          },
+          version: 0
+        }
+        localStorage.setItem('project-agent-storage', JSON.stringify(storageData))
+        
+        // 使用完整页面刷新跳转（最可靠，避免水合覆盖问题）
+        window.location.href = '/agent/'
       } else {
         setError('登录失败，请检查用户名和密码')
         triggerShake()

@@ -60,11 +60,13 @@ export default function Layout({ children }: LayoutProps) {
     { path: '/projects', label: '项目', roles: [11, 13, 14, 15, 16] },
     { path: '/chat', label: '问答', roles: [11, 13, 14, 15, 16] },
     { path: '/dashboard', label: '看板', roles: [11, 13, 14, 15, 16, 17] }, // 所有角色都能看
+    { path: '/research', label: '归集', roles: [11] }, // 仅管理员可见，放在看板后面
   ]
 
   // 根据角色过滤菜单
   const navItems = allNavItems.filter(item => {
-    const userRoleId = user?.role_id || 13
+    const userRoleId = user?.role_id ?? 13  // 使用 ?? 避免 undefined
+    console.log('调试 - 用户role_id:', userRoleId, '菜单需要:', item.roles, '路径:', item.path)
     return item.roles.includes(userRoleId)
   })
 

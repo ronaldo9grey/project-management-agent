@@ -1,8 +1,7 @@
-import { Link } from 'react-router-dom'
-import { redirectToLogin, safeRedirect } from '../utils/auth'
+import SharedHeader from '../components/SharedHeader'
 import MobileNav from '../components/MobileNav'
 import { useState, useEffect } from 'react'
-import { useAppStore } from '../store'
+import { useNavigate } from 'react-router-dom'
 import { projectApi } from '../api'
 
 interface Project {
@@ -15,7 +14,7 @@ interface Project {
 }
 
 export default function ProjectsPage() {
-  const { user, logout } = useAppStore()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
@@ -72,13 +71,9 @@ export default function ProjectsPage() {
     }
   }
 
-  const handleLogout = () => {
-    logout()
-    redirectToLogin()
-  }
 
   const goToDetail = (projectId: number) => {
-    safeRedirect(`/agent/projects/${projectId}`)
+    navigate(`/projects/${projectId}`)
   }
 
   // 渲染项目卡片
@@ -118,57 +113,7 @@ export default function ProjectsPage() {
   return (
     <div className="page-container">
       {/* 顶部导航 */}
-      <header className="header">
-        <div className="header-content">
-          <div className="header-left">
-            <Link to="/" className="header-logo">
-              <span className="text-xl">⚙️</span>
-              <span>项目管家</span>
-            </Link>
-            <nav className="header-nav">
-              <Link to="/" className="nav-link">个人</Link>
-              <Link to="/daily" className="nav-link">日报</Link>
-              <Link to="/projects" className="nav-link active">项目</Link>
-              <Link to="/tracking" className="nav-link">追踪</Link>
-              <Link to="/quality" className="nav-link">质量</Link>
-              <Link to="/dashboard" className="nav-link">看板</Link>
-            </nav>
-          </div>
-          <div className="header-right">
-            <div className="user-menu-wrapper">
-              <div 
-                className="user-info"
-                onClick={() => setShowUserMenu(!showUserMenu)}
-              >
-                <div className="user-avatar">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
-                <span className="user-name">{user?.name || '用户'}</span>
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-              {showUserMenu && (
-                <div className="user-dropdown">
-                  <div className="user-dropdown-header">
-                    <div className="user-avatar-lg">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
-                    <div>
-                      <div className="font-medium text-gray-900">{user?.name || '用户'}</div>
-                      {user?.department && <div className="text-sm text-gray-600">{user.department}</div>}
-                      {user?.position && <div className="text-xs text-gray-500">{user.position}</div>}
-                    </div>
-                  </div>
-                  <div className="user-dropdown-divider" />
-                  <button className="user-dropdown-item" onClick={handleLogout}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    退出登录
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <SharedHeader />
 
       {/* 主内容 */}
       <main className="content-wrapper">

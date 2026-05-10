@@ -1,5 +1,4 @@
-import { Link } from 'react-router-dom'
-import { redirectToLogin } from '../utils/auth'
+import SharedHeader from '../components/SharedHeader'
 import MobileNav from '../components/MobileNav'
 import CalendarView from '../components/CalendarView'
 import { useState, useEffect, useRef } from 'react'
@@ -50,7 +49,7 @@ interface ParseWarning {
 }
 
 export default function DailyPage() {
-  const { user, dailyEntries, addDailyEntry, removeDailyEntry, clearDailyEntries, logout, 
+  const { dailyEntries, addDailyEntry, removeDailyEntry, clearDailyEntries,
           dailyDraft, saveDailyDraft, clearDailyDraft } = useAppStore()
   
   // 📌 所有状态变量
@@ -321,7 +320,7 @@ export default function DailyPage() {
       const errorMsg = error.response?.data?.detail || '解析失败，请重试'
       setParseWarnings([
         { type: 'error' as const, message: `❌ ${errorMsg}` },
-        { type: 'info' as const, message: '💡 您可以重新输入或手动添加工作记录' }
+        { type: 'info' as const, message: '💡 请检查输入内容后重新解析，或稍后重试' }
       ])
       console.error(error)
       // 解析失败，保留输入内容
@@ -406,10 +405,6 @@ export default function DailyPage() {
     }
   }
 
-  const handleLogout = () => {
-    logout()
-    redirectToLogin()
-  }
 
   const totalHours = dailyEntries.reduce((sum, e) => {
     // 如果 hours=0 且有共享时间段，使用 period_total_hours
@@ -452,58 +447,7 @@ export default function DailyPage() {
   return (
     <div className="page-container">
       {/* 顶部导航 */}
-      <header className="header">
-        <div className="header-content">
-          <div className="header-left">
-            <Link to="/" className="header-logo">
-              <span className="text-xl">⚙️</span>
-              <span>项目管家</span>
-            </Link>
-            <nav className="header-nav">
-              <Link to="/" className="nav-link">个人</Link>
-              <Link to="/daily" className="nav-link active">日报</Link>
-              <Link to="/projects" className="nav-link">项目</Link>
-              <Link to="/tracking" className="nav-link">追踪</Link>
-              <Link to="/quality" className="nav-link">质量</Link>
-              <Link to="/dashboard" className="nav-link">看板</Link>
-            </nav>
-          </div>
-          <div className="header-right">
-            <div className="user-menu-wrapper">
-              <div 
-                className="user-info"
-                onClick={() => setShowUserMenu(!showUserMenu)}
-              >
-                <div className="user-avatar">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
-                <span className="user-name">{user?.name || '用户'}</span>
-                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-              {/* 下拉菜单 */}
-              {showUserMenu && (
-                <div className="user-dropdown">
-                  <div className="user-dropdown-header">
-                    <div className="user-avatar-lg">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
-                    <div>
-                      <div className="font-medium text-gray-900">{user?.name || '用户'}</div>
-                      {user?.department && <div className="text-sm text-gray-600">{user.department}</div>}
-                      {user?.position && <div className="text-xs text-gray-500">{user.position}</div>}
-                    </div>
-                  </div>
-                  <div className="user-dropdown-divider" />
-                  <button className="user-dropdown-item" onClick={handleLogout}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                    </svg>
-                    退出登录
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
+      <SharedHeader />
 
       {/* 主内容 */}
       <main className="content-wrapper">
@@ -793,7 +737,7 @@ export default function DailyPage() {
                             正在智能解析...
                           </div>
                           <div style={{fontSize: '12px', color: '#64748b', marginTop: '4px'}}>
-                            AI 正在识别项目和任务（预计 10-30 秒）
+                            AI 正在识别项目和任务（预计 10-60 秒）
                           </div>
                         </div>
                       </div>
