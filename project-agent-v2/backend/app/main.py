@@ -4526,44 +4526,63 @@ async def update_project_task_status(
 @app.get("/agent/api/agent/projects", response_model=List[ProjectInfo])
 async def get_projects(current_user: Dict = Depends(get_current_user)):
     """
-    获取项目列表（需要认证）
+    获取项目列表（需要认证，组织隔离）
 
-    admin 可以看到所有项目
-    项目经理只能看到自己负责的项目
+    权限规则：
+    - 系统管理员(role_id=11)：看全部项目
+    - 财务(role_id=15)：看研究院所有项目
+    - 看板(role_id=17)：看研究院所有项目
+    - 院领导(role_id=16)：看本组织及下级项目
+    - 普通用户：看本组织及下级项目 + 自己负责的项目
     """
     username = current_user.get("username")
     
-    # 直接从数据库查询用户信息，不依赖内存缓存（避免多worker不一致）
     from dotenv import load_dotenv
     load_dotenv()
     
     with get_connection() as conn:
-        # 查询用户角色（从 personnel 表获取 role_id）
+        # 查询用户信息（含组织）
         user_result = conn.execute(text("""
-            SELECT p.employee_id, p.name, p.department, p.role_id
+            SELECT p.employee_id, p.name, p.department, p.role_id, p.org_id
             FROM personnel p
-            WHERE p.employee_id = :username
+            WHERE p.employee_id = :username AND p.is_deleted = false
         """), {"username": username}).fetchone()
         
         if not user_result:
             raise HTTPException(status_code=401, detail="用户不存在")
         
-        user_info = {
-            "employee_id": user_result[0],
-            "name": user_result[1],
-            "department": user_result[2],
-            "role_id": user_result[3]
-        }
+        employee_id, employee_name, department, role_id, org_id = user_result
         
-        role_id = user_info.get("role_id")
-        employee_name = user_info.get("name", "")
+        logger.debug(f"用户 {employee_name}(role={role_id}, org={org_id}) 查询项目")
         
-        # 全员可见所有项目
-        logger.debug(f"用户 {employee_name} 查询所有项目")
-        result = conn.execute(text("""
-            SELECT id, name, leader, status, project_year FROM projects
-            WHERE is_deleted = false ORDER BY project_year DESC, id
-        """))
+        # 构建权限过滤条件
+        if role_id == 11:  # 系统管理员：看全部
+            result = conn.execute(text("""
+                SELECT id, name, leader, status, project_year FROM projects
+                WHERE is_deleted = false ORDER BY project_year DESC, id
+            """))
+        elif role_id in [15, 17]:  # 财务、看板：看研究院所有项目
+            result = conn.execute(text("""
+                SELECT id, name, leader, status, project_year FROM projects
+                WHERE is_deleted = false 
+                  AND org_id IN (SELECT id FROM organizations WHERE id = 2 OR parent_id = 2)
+                ORDER BY project_year DESC, id
+            """))
+        elif role_id == 16:  # 院领导：看本组织及下级
+            result = conn.execute(text("""
+                SELECT id, name, leader, status, project_year FROM projects
+                WHERE is_deleted = false 
+                  AND org_id IN (SELECT id FROM organizations WHERE id = :org_id OR parent_id = :org_id)
+                ORDER BY project_year DESC, id
+            """), {"org_id": org_id})
+        else:  # 普通用户：看本组织及下级 + 自己负责的项目
+            result = conn.execute(text("""
+                SELECT id, name, leader, status, project_year FROM projects
+                WHERE is_deleted = false 
+                  AND (org_id IN (SELECT id FROM organizations WHERE id = :org_id OR parent_id = :org_id) 
+                       OR leader = :name)
+                ORDER BY project_year DESC, id
+            """), {"org_id": org_id, "name": employee_name})
         
         # 计算每个项目的进度（工期加权，与详情页和看板统一）
         projects = []
@@ -4638,6 +4657,7 @@ async def get_project_detail(
 ):
     """
     获取项目详情（包含工时统计、成本数据、进度计算）
+    权限检查：用户只能访问有权限的项目
     """
     username = current_user.get("username")
     
@@ -4648,12 +4668,53 @@ async def get_project_detail(
         raise HTTPException(status_code=401, detail="未找到用户认证信息")
 
     try:
-        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
-        # 从数据库直接查询项目信息
+        
         with get_connection() as conn:
-            # 项目基本信息
+            # 1. 查询用户信息
+            user_result = conn.execute(text("""
+                SELECT p.employee_id, p.name, p.role_id, p.org_id
+                FROM personnel p
+                WHERE p.employee_id = :username AND p.is_deleted = false
+            """), {"username": username}).fetchone()
+            
+            if not user_result:
+                raise HTTPException(status_code=401, detail="用户不存在")
+            
+            _, employee_name, role_id, user_org_id = user_result
+            
+            # 2. 查询项目所属组织
+            project_org_result = conn.execute(text("""
+                SELECT org_id, leader FROM projects WHERE id = :pid AND is_deleted = false
+            """), {"pid": project_id}).fetchone()
+            
+            if not project_org_result:
+                raise HTTPException(status_code=404, detail="项目不存在")
+            
+            project_org_id, project_leader = project_org_result
+            
+            # 3. 权限检查
+            has_access = False
+            if role_id == 11:  # 系统管理员
+                has_access = True
+            elif role_id in [15, 17]:  # 财务、看板：看研究院项目
+                has_access = project_org_id in [2, 5, 6, 7, 8, 9]
+            elif role_id == 16 and user_org_id:  # 院领导
+                org_ids = [user_org_id] + [r[0] for r in conn.execute(text(
+                    "SELECT id FROM organizations WHERE parent_id = :oid"
+                ), {"oid": user_org_id}).fetchall()]
+                has_access = project_org_id in org_ids
+            elif user_org_id:  # 普通用户
+                org_ids = [user_org_id] + [r[0] for r in conn.execute(text(
+                    "SELECT id FROM organizations WHERE parent_id = :oid"
+                ), {"oid": user_org_id}).fetchall()]
+                has_access = project_org_id in org_ids or project_leader == employee_name
+            
+            if not has_access:
+                raise HTTPException(status_code=403, detail="无权访问该项目")
+            
+            # 4. 项目基本信息
             project_result = conn.execute(text("""
                 SELECT id, name, leader, status,
                        start_date, end_date,
