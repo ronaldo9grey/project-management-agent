@@ -2190,9 +2190,12 @@ async def get_work_hours_stats(current_user: Dict = Depends(get_current_user), r
 @app.get("/agent/api/agent/dashboard/today-focus")
 async def get_today_focus(current_user: Dict = Depends(get_current_user), request: Request = None):
     """
-    获取今日聚焦数据
+    获取今日聚焦数据（组织隔离）
     
-    【修复】不再从内存缓存获取 token，直接从请求 header 获取
+    权限规则：
+    - 系统管理员：看全部项目的任务
+    - 财务/看板：看研究院项目的任务
+    - 普通用户：看本组织及下级项目的任务
     
     返回：
     - today_tasks: 今日待办任务
@@ -2202,15 +2205,14 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
     """
     username = current_user.get("username") or current_user.get("sub")
     
-    # 【修复】从请求 header 获取 token（不再依赖内存缓存）
+    # 从请求 header 获取 token
     token = None
     if request and request.headers.get("authorization"):
         auth_header = request.headers.get("authorization")
         if auth_header.startswith("Bearer "):
-            token = auth_header[7:]  # 去掉 "Bearer " 前缀
+            token = auth_header[7:]
     
     if not token:
-        # 如果 header 中没有，尝试从 current_user 获取（兼容旧逻辑）
         token = current_user.get("_raw_token") or get_user_token(username)
     
     if not token:
@@ -2222,27 +2224,48 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
         employee_id = user_info.get("employee_id") if user_info else username
         employee_name = user_info.get("name") if user_info else username
 
-        # text 已从 database 模块导入
         from dotenv import load_dotenv
         load_dotenv()
         today = datetime.now().date()
         current_month = today.strftime("%Y-%m")
 
         with get_connection() as conn:
-            # 1. 今日待办任务（截止日期在今天）
-            result = conn.execute(text("""
+            # 获取用户角色和组织
+            user_result = conn.execute(text("""
+                SELECT p.role_id, p.org_id
+                FROM personnel p
+                WHERE p.employee_id = :username AND p.is_deleted = false
+            """), {"username": username}).fetchone()
+            
+            if not user_result:
+                raise HTTPException(status_code=401, detail="用户不存在")
+            
+            role_id, org_id = user_result
+            
+            # 构建项目过滤条件
+            if role_id == 11:  # 系统管理员
+                org_filter = ""
+            elif role_id in [15, 17]:  # 财务、看板：研究院项目
+                org_filter = "AND p.org_id IN (SELECT id FROM organizations WHERE id = 2 OR parent_id = 2)"
+            elif org_id:  # 普通用户：本组织及下级项目
+                org_filter = f"AND p.org_id IN (SELECT id FROM organizations WHERE id = {org_id} OR parent_id = {org_id})"
+            else:
+                org_filter = "AND 1=0"  # 无组织用户，不显示任何项目
+
+            # 1. 今日待办任务（本组织项目的今日截止任务）
+            result = conn.execute(text(f"""
                 SELECT pt.task_id, pt.task_name, pt.project_id, p.name as project_name,
-                       pt.start_date, pt.end_date, pt.status, pt.progress
+                       pt.start_date, pt.end_date, pt.status, pt.progress, pt.assignee_id
                 FROM project_tasks pt
                 JOIN projects p ON CAST(pt.project_id AS INTEGER) = p.id
                 WHERE pt.is_deleted = false
                   AND p.is_deleted = false
-                  AND pt.assignee_id = :emp_id
+                  {org_filter}
                   AND pt.end_date = :today
                   AND pt.actual_end_date IS NULL
                 ORDER BY pt.end_date
                 LIMIT 10
-            """), {"emp_id": employee_id, "today": today})
+            """), {"today": today})
 
             today_tasks = []
             for row in result:
@@ -2257,8 +2280,8 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                     "progress": float(row[7] or 0)
                 })
 
-            # 2. 延期任务（已超期未完成）
-            result = conn.execute(text("""
+            # 2. 延期任务（本组织项目的已超期未完成任务）
+            result = conn.execute(text(f"""
                 SELECT pt.task_id, pt.task_name, pt.project_id, p.name as project_name,
                        pt.start_date, pt.end_date,
                        CURRENT_DATE - pt.end_date as delay_days,
@@ -2267,12 +2290,12 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                 JOIN projects p ON CAST(pt.project_id AS INTEGER) = p.id
                 WHERE pt.is_deleted = false
                   AND p.is_deleted = false
-                  AND pt.assignee_id = :emp_id
+                  {org_filter}
                   AND pt.end_date < CURRENT_DATE
                   AND pt.actual_end_date IS NULL
                 ORDER BY delay_days DESC
-                LIMIT 5
-            """), {"emp_id": employee_id})
+                LIMIT 10
+            """))
 
             delayed_tasks = []
             for row in result:
@@ -2288,15 +2311,15 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                     "progress": float(row[8] or 0)
                 })
 
-            # 3. 本月目标进度 - 从项目计划中自动获取（只取最新版本）
+            # 3. 本月目标进度（本组织项目的任务）
             from datetime import timedelta
             month_start = today.replace(day=1)
             month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
             month_goals = []
 
-            # 获取本月要开始的任务（计划开始日期在本月）- 只取最新版本
-            month_start_result = conn.execute(text("""
+            # 获取本月要开始的任务
+            month_start_result = conn.execute(text(f"""
                 WITH latest_tasks AS (
                     SELECT pt.*,
                            CAST(SUBSTRING(pt.task_id FROM 'V([0-9]+)') AS INTEGER) as version,
@@ -2307,7 +2330,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                     JOIN projects p ON CAST(pt.project_id AS INTEGER) = p.id
                     WHERE pt.is_deleted = false
                       AND p.is_deleted = false
-                      AND (pt.assignee_id = :emp_id OR p.leader = :emp_name OR p.leader = :username)
+                      {org_filter}
                 )
                 SELECT task_id, task_name, start_date, end_date, progress, status
                 FROM latest_tasks
@@ -2315,7 +2338,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                   AND start_date >= :month_start
                   AND start_date <= :month_end
                 ORDER BY start_date
-            """), {"emp_id": employee_id, "emp_name": employee_name, "username": username, "month_start": month_start, "month_end": month_end})
+            """), {"month_start": month_start, "month_end": month_end})
 
             for row in month_start_result:
                 month_goals.append({
@@ -2328,8 +2351,8 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                     "end_date": str(row[3]) if row[3] else None
                 })
 
-            # 获取本月要完成的任务（计划结束日期在本月）- 只取最新版本
-            month_end_result = conn.execute(text("""
+            # 获取本月要完成的任务
+            month_end_result = conn.execute(text(f"""
                 WITH latest_tasks AS (
                     SELECT pt.*,
                            CAST(SUBSTRING(pt.task_id FROM 'V([0-9]+)') AS INTEGER) as version,
@@ -2340,7 +2363,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                     JOIN projects p ON CAST(pt.project_id AS INTEGER) = p.id
                     WHERE pt.is_deleted = false
                       AND p.is_deleted = false
-                      AND (pt.assignee_id = :emp_id OR p.leader = :emp_name OR p.leader = :username)
+                      {org_filter}
                 )
                 SELECT task_id, task_name, start_date, end_date, progress, status
                 FROM latest_tasks
@@ -2349,10 +2372,9 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                   AND end_date <= :month_end
                   AND status != '已完成'
                 ORDER BY end_date
-            """), {"emp_id": employee_id, "emp_name": employee_name, "username": username, "month_start": month_start, "month_end": month_end})
+            """), {"month_start": month_start, "month_end": month_end})
 
             for row in month_end_result:
-                # 避免重复（如果一个任务既在本月开始又在本月结束，只显示一次）
                 existing = next((g for g in month_goals if g["id"] == f"end_{row[0]}"), None)
                 if not existing:
                     month_goals.append({
@@ -2365,7 +2387,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                         "end_date": str(row[3]) if row[3] else None
                     })
 
-            # 4. 今日日报填报状态
+            # 4. 今日日报填报状态（仍看自己的）
             result = conn.execute(text("""
                 SELECT id, report_date, status
                 FROM daily_reports
@@ -2382,7 +2404,7 @@ async def get_today_focus(current_user: Dict = Depends(get_current_user), reques
                 "status": daily_report_row[2] if daily_report_row else None
             }
 
-            # 5. 本周工作概览
+            # 5. 本周工作概览（仍看自己的）
             week_start = today - timedelta(days=today.weekday())
             result = conn.execute(text("""
                 SELECT
@@ -2680,62 +2702,63 @@ async def get_my_project_risks(current_user: Dict = Depends(get_current_user)):
 @app.get("/agent/api/agent/stats/team-work-hours")
 async def get_team_work_hours(current_user: Dict = Depends(get_current_user)):
     """
-    获取团队工时统计（项目负责人视角）
+    获取团队工时统计（组织隔离）
 
-    返回用户负责的项目下所有成员的工时分布
+    权限规则：
+    - 系统管理员：看全部项目工时
+    - 财务/看板：看研究院项目工时
+    - 普通用户：看本组织及下级项目工时
     """
     username = current_user.get("username") or current_user.get("sub")
-    employee_id = current_user.get("employee_id") or username
 
-    if not employee_id:
-        return []
-
-    # text 已从 database 模块导入
     from dotenv import load_dotenv
     load_dotenv()
-    # 获取本月第一天和最后一天
+    
     today = datetime.now().date()
     month_start = today.replace(day=1)
     month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
 
     with get_connection() as conn:
-        # 查询员工姓名
-        emp_result = conn.execute(text("""
-            SELECT name FROM personnel 
-            WHERE employee_id = :emp_id AND is_deleted = false
-            LIMIT 1
-        """), {"emp_id": employee_id})
-        emp_row = emp_result.fetchone()
-        employee_name = emp_row[0] if emp_row else None
-
-        # 查询用户负责的项目
-        projects_result = conn.execute(text("""
-            SELECT id, name FROM projects
-            WHERE is_deleted = false AND leader = :emp_name
-        """), {"emp_name": employee_name or ""})
-
-        project_ids = [row[0] for row in projects_result]
-        if not project_ids:
+        # 获取用户角色和组织
+        user_result = conn.execute(text("""
+            SELECT p.role_id, p.org_id
+            FROM personnel p
+            WHERE p.employee_id = :username AND p.is_deleted = false
+        """), {"username": username}).fetchone()
+        
+        if not user_result:
             return []
+        
+        role_id, org_id = user_result
+        
+        # 构建项目过滤条件
+        if role_id == 11:  # 系统管理员
+            org_filter = ""
+        elif role_id in [15, 17]:  # 财务、看板
+            org_filter = "AND p.org_id IN (SELECT id FROM organizations WHERE id = 2 OR parent_id = 2)"
+        elif org_id:  # 普通用户
+            org_filter = f"AND p.org_id IN (SELECT id FROM organizations WHERE id = {org_id} OR parent_id = {org_id})"
+        else:
+            return []  # 无组织用户
 
-        # 查询这些项目下所有成员的工时
-        result = conn.execute(text("""
+        # 查询本组织项目下所有成员的工时
+        result = conn.execute(text(f"""
             SELECT
                 p.name as project_name,
                 per.name as member_name,
                 SUM(dwi.hours_spent) as total_hours
             FROM daily_work_items dwi
             JOIN daily_reports dr ON dr.id = dwi.report_id
-            JOIN personnel per ON per.employee_id = dr.employee_id
-            JOIN projects p ON dwi.project_name LIKE '%' || p.name || '%'
-            WHERE p.id = ANY(:project_ids)
+            JOIN personnel per ON per.employee_id = dr.employee_id AND per.is_deleted = false
+            JOIN projects p ON dwi.project_id = p.id
+            WHERE p.is_deleted = false
+              {org_filter}
               AND dr.report_date >= :month_start
               AND dr.report_date <= :month_end
               AND dr.is_deleted = false
             GROUP BY p.name, per.name
             ORDER BY p.name, total_hours DESC
         """), {
-            "project_ids": project_ids,
             "month_start": month_start,
             "month_end": month_end
         })
