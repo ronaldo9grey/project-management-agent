@@ -7,6 +7,19 @@ import { apiClient, api } from '../api'
 import { showToast } from '../components/Toast'
 import { confirm } from '../components/ConfirmDialog'
 
+// 弹窗打开时禁止主页面滚动
+const useLockBodyScroll = (lock: boolean) => {
+  useEffect(() => {
+    if (lock) {
+      const originalOverflow = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = originalOverflow || ''
+      }
+    }
+  }, [lock])
+}
+
 // 判断是否手机端
 const useIsMobile = () => {
   const [isMobile, setIsMobile] = useState(false)
@@ -159,6 +172,9 @@ function MonthlyHoursCard({
     totalHours: 0,
     loading: false
   })
+  
+  // 弹窗打开时禁止主页面滚动
+  useLockBodyScroll(detailModal.show)
   
   // 查询工时详情
   const loadHoursDetail = async (projectName: string, employeeName: string) => {
@@ -693,7 +709,10 @@ function MonthlyHoursCard({
         {detailModal.show && (
           <div style={{
             position: 'fixed',
-            inset: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
             background: 'rgba(0,0,0,0.5)',
             display: 'flex',
             alignItems: 'center',
