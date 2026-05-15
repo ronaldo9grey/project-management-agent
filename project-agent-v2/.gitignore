@@ -1,0 +1,53 @@
+# 敏感信息 - 绝对禁止上传
+.env
+*.env
+.env.*
+backend/.env
+backend/.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+dist/
+build/
+backend/venv/
+
+# Node.js
+node_modules/
+frontend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 构建产物
+backend/app/static/
+frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志
+*.log
+backend/logs/
+
+# 数据库备份
+*.backup
+*.sql.gz
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 测试数据
+test_*.json
+*.xlsx

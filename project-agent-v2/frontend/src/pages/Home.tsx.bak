@@ -1,0 +1,420 @@
+import { useState, useEffect } from 'react'
+import { useAppStore } from '../store'
+import { dashboardApi, statsApi, notificationApi } from '../api'
+import SmartAssistant from '../components/SmartAssistant'
+
+interface MonthGoal {
+  id: number
+  title: string
+  progress_rate: number
+  status: string
+}
+
+interface ProjectRisk {
+  project_id: number
+  project_name: string
+  leader: string
+  delayed_count: number
+  max_delay_days: number
+  total_tasks: number
+  delayed_tasks: number
+  delay_rate: number
+}
+
+interface TeamWorkHours {
+  project_name: string
+  members: Array<{
+    name: string
+    hours: number
+    percent: number
+  }>
+  total_hours: number
+}
+
+export default function HomePage() {
+  const { user, logout } = useAppStore()
+  const [showUserMenu, setShowUserMenu] = useState(false)
+  
+  // 今日聚焦数据
+  const [monthGoals, setMonthGoals] = useState<MonthGoal[]>([])
+  const [dailyReportStatus, setDailyReportStatus] = useState({ submitted: false })
+  const [weekOverview, setWeekOverview] = useState({ report_count: 0, total_hours: 0, project_count: 0 })
+  const [isLoading, setIsLoading] = useState(true)
+  
+  // 我负责的项目风险预警
+  const [myProjectRisks, setMyProjectRisks] = useState<ProjectRisk[]>([])
+  
+  // 工时统计
+  const [workHoursStats, setWorkHoursStats] = useState<{
+    today: number
+    week: number
+    month: number
+    projects: Array<{ name: string; hours: number; percent: number }>
+  }>({ today: 0, week: 0, month: 0, projects: [] })
+  
+  // 团队工时统计（项目负责人视角）
+  const [teamWorkHours, setTeamWorkHours] = useState<TeamWorkHours[]>([])
+  
+  // 通知未读数
+  const [notificationUnread, setNotificationUnread] = useState(0)
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const loadData = async () => {
+    setIsLoading(true)
+    try {
+      // 并行加载
+      const [focusData, hoursData, notifData, risksData, teamData] = await Promise.all([
+        dashboardApi.getTodayFocus(),
+        statsApi.getWorkHoursStats().catch(() => ({ today: 0, week: 0, month: 0, projects: [] })),
+        notificationApi.getList(true, 1).catch(() => ({ notifications: [], unread_count: 0 })),
+        // 获取我负责的项目风险
+        dashboardApi.getMyProjectRisks().catch(() => []),
+        // 获取团队工时（如果是项目负责人）
+        statsApi.getTeamWorkHours().catch(() => [])
+      ])
+      
+      setMonthGoals(focusData.month_goals || [])
+      setDailyReportStatus(focusData.daily_report_status || { submitted: false })
+      setWeekOverview(focusData.week_overview || { report_count: 0, total_hours: 0, project_count: 0 })
+      setWorkHoursStats(hoursData)
+      setNotificationUnread(notifData.unread_count || 0)
+      setMyProjectRisks(risksData)
+      setTeamWorkHours(teamData)
+    } catch (error) {
+      console.error('加载数据失败:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleLogout = () => {
+    logout()
+    window.location.href = '/agent/login'
+  }
+
+  const getWeekday = () => {
+    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+    return weekdays[new Date().getDay()]
+  }
+
+  return (
+    <div className="page-container">
+      {/* 顶部导航 */}
+      <header className="header">
+        <div className="header-content">
+          <div className="header-left">
+            <a href="/agent/" className="header-logo">
+              <span className="text-xl">⚙️</span>
+              <span>项目管家智能体</span>
+            </a>
+            <nav className="header-nav">
+              <a href="/agent/" className="nav-link active">个人</a>
+              <a href="/agent/daily" className="nav-link">日报</a>
+              <a href="/agent/projects" className="nav-link">项目</a>
+              <a href="/agent/chat" className="nav-link">
+                <span style={{marginRight: '4px'}}>🤖</span>
+                智能问答
+              </a>
+            </nav>
+          </div>
+          <div className="header-right">
+            {/* 通知图标 */}
+            <a href="/agent/notifications" className="notification-bell">
+              🔔
+              {notificationUnread > 0 && (
+                <span className="notification-badge">{notificationUnread > 99 ? '99+' : notificationUnread}</span>
+              )}
+            </a>
+            
+            <div className="user-menu-wrapper">
+              <div className="user-info" onClick={() => setShowUserMenu(!showUserMenu)}>
+                <div className="user-avatar">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
+                <span className="user-name">{user?.name || '用户'}</span>
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+              {showUserMenu && (
+                <div className="user-dropdown">
+                  <div className="user-dropdown-header">
+                    <div className="user-avatar-lg">{user?.name?.[0]?.toUpperCase() || 'U'}</div>
+                    <div>
+                      <div className="font-medium text-gray-900">{user?.name || '用户'}</div>
+                      <div className="text-sm text-gray-500">{user?.role_name || ''}</div>
+                    </div>
+                  </div>
+                  <div className="user-dropdown-divider" />
+                  <button className="user-dropdown-item" onClick={handleLogout}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    退出登录
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* 主内容 */}
+      <main className="content-wrapper">
+        {isLoading ? (
+          <div className="empty-state" style={{padding: '80px'}}>
+            <span className="spinner" style={{width: '40px', height: '40px'}}></span>
+            <p className="text-gray-500 mt-4">加载中...</p>
+          </div>
+        ) : (
+          <>
+            {/* 欢迎区域 + 日报状态 */}
+            <div className="mb-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">
+                    {getWeekday()}好，{user?.name || '工程师'}
+                  </h1>
+                  <p className="text-gray-500 mt-1">
+                    {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  </p>
+                </div>
+                {/* 日报填报状态 */}
+                {dailyReportStatus.submitted ? (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-green-50 rounded-lg border border-green-200">
+                    <span className="text-green-600 text-xl">✓</span>
+                    <span className="text-green-700 font-medium">今日日报已提交</span>
+                  </div>
+                ) : (
+                  <a href="/agent/daily" className="btn btn-primary">
+                    <span>📝</span>
+                    填报今日日报
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {/* 本周概览 */}
+            <div className="grid-4 mb-6">
+              <div className="stat-card">
+                <div className="stat-icon">📊</div>
+                <div className="stat-content">
+                  <div className="stat-value">{weekOverview.report_count}</div>
+                  <div className="stat-label">本周日报</div>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-icon">⏱️</div>
+                <div className="stat-content">
+                  <div className="stat-value">{workHoursStats.week.toFixed(1)}<span className="stat-unit">h</span></div>
+                  <div className="stat-label">本周工时</div>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-icon">📁</div>
+                <div className="stat-content">
+                  <div className="stat-value">{weekOverview.project_count}</div>
+                  <div className="stat-label">涉及项目</div>
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-icon">🎯</div>
+                <div className="stat-content">
+                  <div className="stat-value">{monthGoals.length}</div>
+                  <div className="stat-label">本月目标</div>
+                </div>
+              </div>
+            </div>
+
+            {/* 主要内容区 - 左右两列对齐 */}
+            <div className="grid-2" style={{gap: '24px'}}>
+              {/* 左列 */}
+              <div className="space-y-6">
+                {/* 智能问答助手 */}
+                <SmartAssistant />
+                
+                {/* 本月目标 */}
+                <div className="card">
+                  <div className="card-header">
+                    <h2 className="card-title">🎯 本月目标</h2>
+                  </div>
+                  <div className="card-body">
+                    {monthGoals.length === 0 ? (
+                      <div className="empty-state" style={{padding: '30px'}}>
+                        <div className="empty-icon">📝</div>
+                        <p className="empty-title">暂无目标</p>
+                        <p className="empty-desc">请到目标管理设置本月目标</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {monthGoals.map((goal) => (
+                          <div key={goal.id}>
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-gray-700 font-medium">{goal.title}</span>
+                              <span className={`tag ${goal.progress_rate >= 80 ? 'tag-success' : goal.progress_rate >= 50 ? 'tag-warning' : 'tag-default'}`}>
+                                {goal.progress_rate}%
+                              </span>
+                            </div>
+                            <div className="progress-bar">
+                              <div 
+                                className="progress-bar-fill" 
+                                style={{ 
+                                  width: `${goal.progress_rate}%`,
+                                  background: goal.progress_rate >= 80 ? 'var(--success)' : goal.progress_rate >= 50 ? 'var(--warning)' : 'var(--primary)'
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 我负责的项目风险预警 */}
+                <div className="card" style={{borderLeft: '4px solid #f59e0b'}}>
+                  <div className="card-header">
+                    <h2 className="card-title">⚠️ 我的项目风险预警</h2>
+                    {myProjectRisks.length > 0 && (
+                      <span className="tag tag-warning">{myProjectRisks.length} 个项目</span>
+                    )}
+                  </div>
+                  <div className="card-body">
+                    {myProjectRisks.length === 0 ? (
+                      <div className="empty-state" style={{padding: '30px'}}>
+                        <div className="empty-icon">✅</div>
+                        <p className="empty-title">暂无风险</p>
+                        <p className="empty-desc">您负责的项目运行正常</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {myProjectRisks.map((project) => (
+                          <div 
+                            key={project.project_id} 
+                            className="p-3 rounded-lg"
+                            style={{background: project.delayed_count > 0 ? '#fef3c7' : '#f0f9ff'}}
+                          >
+                            <div className="flex justify-between items-start mb-2">
+                              <div>
+                                <a 
+                                  href={`/agent/projects/${project.project_id}`} 
+                                  className="font-medium hover:text-blue-600"
+                                  style={{color: '#1e40af'}}
+                                >
+                                  {project.project_name}
+                                </a>
+                                <div className="text-sm text-gray-500 mt-1">
+                                  进度: {project.total_tasks - project.delayed_tasks}/{project.total_tasks} 任务
+                                </div>
+                              </div>
+                              {project.delayed_count > 0 ? (
+                                <span className="tag tag-danger">{project.delayed_count} 延期</span>
+                              ) : (
+                                <span className="tag tag-success">正常</span>
+                              )}
+                            </div>
+                            {project.delayed_count > 0 && (
+                              <div className="text-xs" style={{color: '#dc2626'}}>
+                                ⚠️ 最长延期 {project.max_delay_days} 天
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 右列 */}
+              <div className="space-y-6">
+                {/* 个人本月工时分布 */}
+                {workHoursStats.projects.length > 0 && (
+                  <div className="card">
+                    <div className="card-header">
+                      <h2 className="card-title">📊 个人本月工时</h2>
+                      <span className="text-sm text-gray-500">共 {workHoursStats.month.toFixed(1)}h</span>
+                    </div>
+                    <div className="card-body">
+                      <div className="space-y-3">
+                        {workHoursStats.projects.slice(0, 5).map((project) => (
+                          <div key={project.name}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-gray-600 truncate" style={{maxWidth: '200px'}}>{project.name}</span>
+                              <span className="text-gray-900 font-medium">{project.hours}h ({project.percent}%)</span>
+                            </div>
+                            <div className="progress-bar">
+                              <div className="progress-bar-fill" style={{ width: `${project.percent}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 团队工时分布（项目负责人视角） */}
+                <div className="card">
+                  <div className="card-header">
+                    <h2 className="card-title">👥 团队本月工时</h2>
+                    <span className="text-sm text-gray-500">项目负责人视角</span>
+                  </div>
+                  <div className="card-body">
+                    {teamWorkHours.length === 0 ? (
+                      <div className="empty-state" style={{padding: '30px'}}>
+                        <div className="empty-icon">👥</div>
+                        <p className="empty-title">暂无团队工时</p>
+                        <p className="empty-desc">您不是项目负责人或暂无数据</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {teamWorkHours.map((project) => (
+                          <div key={project.project_name}>
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-medium text-gray-900">{project.project_name}</span>
+                              <span className="text-sm text-gray-500">共 {project.total_hours}h</span>
+                            </div>
+                            <div className="space-y-2">
+                              {project.members.slice(0, 5).map((member, idx) => (
+                                <div key={idx} className="flex justify-between text-sm">
+                                  <span className="text-gray-600">{member.name}</span>
+                                  <span className="text-gray-900">{member.hours}h ({member.percent}%)</span>
+                                </div>
+                              ))}
+                              {project.members.length > 5 && (
+                                <div className="text-xs text-gray-400 text-center">
+                                  还有 {project.members.length - 5} 人...
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* 移动端底部导航 */}
+      <nav className="mobile-nav">
+        <a href="/agent/" className="mobile-nav-item active">
+          <span className="mobile-nav-icon">🏠</span>
+          <span>个人</span>
+        </a>
+        <a href="/agent/daily" className="mobile-nav-item">
+          <span className="mobile-nav-icon">📝</span>
+          <span>日报</span>
+        </a>
+        <a href="/agent/projects" className="mobile-nav-item">
+          <span className="mobile-nav-icon">📊</span>
+          <span>项目</span>
+        </a>
+      </nav>
+    </div>
+  )
+}
