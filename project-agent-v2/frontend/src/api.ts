@@ -90,8 +90,8 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 })
 
 // 响应拦截器 - 处理错误 + 请求重试
-// 网络错误自动重试，用户无感知
-const MAX_RETRY = 5  // 增加重试次数，应对移动网络不稳定
+// 连接类错误自动重试，用户无感知
+// 重试策略：连接断开重试2次（0.5s + 1s），服务器错误重试1次
 
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -117,46 +117,53 @@ apiClient.interceptors.response.use(
     // 排除登录接口的特殊处理
     const isLoginRequest = error.config?.url?.includes('/auth/login')
     
-    // 网络错误（ERR_CONNECTION_RESET、ECONNRESET 等）自动重试
-    // 这是关键：连接断开后，前端自动重建连接，用户无感知
+    // ===== 连接类错误（ERR_CONNECTION_RESET 等）：快速重试 2 次 =====
+    // 根因：浏览器到 Nginx 的 TCP 连接被中间设备静默断开
+    // 策略：快速重建连接，用户无感知
     if (!error.response) {
-      // 检查是否真的断网（浏览器离线）
+      // 真正断网，不重试
       if (!window.navigator.onLine) {
         showErrorMessage('网络已断开，请检查网络连接')
         return Promise.reject(error)
       }
       
-      // 重试逻辑
-      if (originalRequest._retry === undefined || originalRequest._retry < MAX_RETRY) {
+      const maxRetry = 2  // 连接断开最多重试 2 次
+      if (originalRequest._retry === undefined || originalRequest._retry < maxRetry) {
         originalRequest._retry = (originalRequest._retry || 0) + 1
         
-        // 第一次快速重试（0.5秒），后续指数退避
-        const delay = originalRequest._retry === 1 ? 500 : 1000 * Math.pow(2, originalRequest._retry - 1)
+        // 第一次 0.5 秒（快速重建连接），第二次 1 秒
+        const delay = originalRequest._retry === 1 ? 500 : 1000
         
         if (import.meta.env.DEV) {
-          console.log(`[Network] 连接断开，${delay}ms 后自动重试 (${originalRequest._retry}/${MAX_RETRY})`)
+          console.log(`[Network] 连接断开，${delay}ms 后自动重试 (${originalRequest._retry}/${maxRetry})`)
         }
         
         await new Promise(r => setTimeout(r, delay))
         return apiClient(originalRequest)  // 重试成功后自动返回，用户无感知
       }
       
-      // 重试次数用尽，才显示错误
-      if (import.meta.env.DEV) {
-        console.error('[Network] 重试失败，可能需要刷新页面')
-      }
+      // 重试 2 次仍失败，提示用户
       showErrorMessage('网络连接不稳定，请稍后重试')
       return Promise.reject(error)
     }
     
-    // 401 认证错误处理（简化版：直接跳转登录页）
+    // ===== 服务器 5xx 错误：重试 1 次 =====
+    if (error.response?.status && error.response.status >= 500) {
+      if (!originalRequest._retry) {
+        originalRequest._retry = 1
+        await new Promise(r => setTimeout(r, 1000))
+        return apiClient(originalRequest)
+      }
+      showErrorMessage('服务器繁忙，请稍后重试')
+      return Promise.reject(error)
+    }
+    
+    // 401 认证错误处理
     if (error.response?.status === 401 && !isLoginRequest) {
       console.log('[Auth] Token 无效，跳转登录页')
       redirectToLogin()
       return Promise.reject(error)
     }
-    
-    // 服务器错误提示
     if (error.response?.status && error.response.status >= 500) {
       showErrorMessage('服务器繁忙，请稍后重试')
     }
