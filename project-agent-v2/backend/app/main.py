@@ -4598,14 +4598,31 @@ async def get_projects(current_user: Dict = Depends(get_current_user)):
                   AND org_id IN (SELECT id FROM organizations WHERE id = :org_id OR parent_id = :org_id)
                 ORDER BY project_year DESC, id
             """), {"org_id": org_id})
-        else:  # 普通用户：看本组织及下级 + 自己负责的项目
+        else:  # 普通用户：看自己负责的 + 自己参与的（有任务或填过日报）
             result = conn.execute(text("""
-                SELECT id, name, leader, status, project_year FROM projects
-                WHERE is_deleted = false 
-                  AND (org_id IN (SELECT id FROM organizations WHERE id = :org_id OR parent_id = :org_id) 
-                       OR leader = :name)
-                ORDER BY project_year DESC, id
-            """), {"org_id": org_id, "name": employee_name})
+                SELECT DISTINCT id, name, leader, status, project_year FROM projects p
+                WHERE p.is_deleted = false 
+                  AND (
+                    p.leader = :name
+                    OR p.id IN (
+                      SELECT DISTINCT CAST(pt.project_id AS INTEGER) 
+                      FROM project_tasks pt 
+                      WHERE pt.is_deleted = false 
+                        AND pt.assignee_id = :emp_id
+                        AND pt.project_id ~ '^[0-9]+$'
+                    )
+                    OR CAST(p.id AS VARCHAR) IN (
+                      SELECT DISTINCT dwi.project_id 
+                      FROM daily_work_items dwi
+                      JOIN daily_reports dr ON dr.id = dwi.report_id
+                      WHERE dr.is_deleted = false 
+                        AND dr.employee_id = :emp_id
+                        AND dwi.project_id IS NOT NULL
+                        AND dwi.project_id ~ '^[0-9]+$'
+                    )
+                  )
+                ORDER BY p.project_year DESC, p.id
+            """), {"name": employee_name, "emp_id": employee_id})
         
         # 计算每个项目的进度（工期加权，与详情页和看板统一）
         projects = []
