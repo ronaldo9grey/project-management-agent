@@ -1151,7 +1151,7 @@ if (typeof window !== 'undefined') {
       if (token) {
         // 发送一次轻量请求，重建连接池中的连接
         // 失败也无所谓，后续请求会自动重试
-        apiClient.get('/api/agent/auth/refresh').catch(() => {})
+        apiClient.post('/api/agent/auth/refresh').catch(() => {})
       }
     }
   })
