@@ -5143,6 +5143,8 @@ async def upload_plan_excel(
     file: UploadFile = File(...),
     version_name: Optional[str] = None,
     description: Optional[str] = None,
+    change_type: Optional[str] = Form(None),
+    change_reason: Optional[str] = Form(None),
     current_user: Dict = Depends(get_current_user)
 ):
     """
@@ -5152,6 +5154,10 @@ async def upload_plan_excel(
     - 第一行为表头
     - 必须包含列：任务名称
     - 可选列：负责人、开始日期、结束日期、工时、状态、备注
+    
+    变更追踪参数：
+    - change_type: 变更类型（初始计划/目标调整/路径调整/偏差纠正/资源调整/其他）
+    - change_reason: 变更原因说明
     """
     username = current_user.get("username")
     
@@ -5161,6 +5167,43 @@ async def upload_plan_excel(
     # 权限检查：只有项目负责人或管理员可以上传（先检查权限，再获取token）
     if not await check_project_edit_permission(project_id, current_user):
         raise HTTPException(status_code=403, detail="只有项目负责人或管理员可以上传计划")
+    
+    # 记录调整前状态快照（如果有历史版本）
+    previous_status = None
+    with get_connection() as conn:
+        # 获取当前最新版本的状态
+        result = conn.execute(text("""
+            SELECT pv.id, pv.version_number, pv.upload_time
+            FROM project_plan_versions pv
+            WHERE pv.project_id = :pid
+            ORDER BY pv.upload_time DESC
+            LIMIT 1
+        """), {"pid": project_id})
+        prev_version = result.fetchone()
+        
+        if prev_version:
+            # 获取当前项目状态快照
+            status_result = conn.execute(text("""
+                SELECT 
+                    COUNT(*) FILTER (WHERE progress >= 100) as completed_tasks,
+                    COUNT(*) FILTER (WHERE progress < 100 AND end_date < CURRENT_DATE) as delayed_tasks,
+                    COUNT(*) FILTER (WHERE progress > 0 AND progress < 100) as ongoing_tasks,
+                    COUNT(*) FILTER (WHERE progress = 0 OR progress IS NULL) as pending_tasks,
+                    COALESCE(AVG(progress), 0) as avg_progress
+                FROM project_tasks
+                WHERE project_id = :pid AND is_latest = true AND is_deleted = false
+            """), {"pid": project_id})
+            status_row = status_result.fetchone()
+            
+            previous_status = {
+                "snapshot_date": datetime.now().strftime("%Y-%m-%d"),
+                "previous_version": prev_version[1],
+                "completed_tasks": status_row[0] or 0,
+                "delayed_tasks": status_row[1] or 0,
+                "ongoing_tasks": status_row[2] or 0,
+                "pending_tasks": status_row[3] or 0,
+                "avg_progress": round(float(status_row[4] or 0), 1)
+            }
     
     # 从请求 header 获取 token（优先），避免依赖内存缓存
     token = None
@@ -5207,15 +5250,27 @@ async def upload_plan_excel(
             result = response.json()
             data = result.get("data", result)
             
-            # 上传成功后，更新本地 project_plan_versions 表的 upload_by 为用户名字（而非工号）
+            # 上传成功后，更新本地 project_plan_versions 表
             version_id = data.get("version_id")
             if version_id:
                 uploader_name = current_user.get("name") or current_user.get("username")
                 try:
                     with get_connection() as conn:
+                        # 更新 upload_by 和变更追踪信息
                         conn.execute(text("""
-                            UPDATE project_plan_versions SET upload_by = :name WHERE id = :vid
-                        """), {"name": uploader_name, "vid": version_id})
+                            UPDATE project_plan_versions 
+                            SET upload_by = :name,
+                                change_type = :change_type,
+                                change_reason = :change_reason,
+                                previous_status = :previous_status
+                            WHERE id = :vid
+                        """), {
+                            "name": uploader_name, 
+                            "vid": version_id,
+                            "change_type": change_type or "初始计划",
+                            "change_reason": change_reason,
+                            "previous_status": json.dumps(previous_status) if previous_status else None
+                        })
                         conn.commit()
                         logger.info(f"更新版本 {version_id} 的上传者为 {uploader_name}")
                 except Exception as e:
@@ -10197,6 +10252,60 @@ async def export_human_cost_excel(
         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         headers={'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"}
     )
+
+
+# ============== 计划版本效果评估 ==============
+
+class PlanEffectUpdate(BaseModel):
+    """计划效果评估更新"""
+    effect_note: str  # 效果评估说明
+
+
+@app.put("/agent/api/agent/plan-versions/{version_id}/effect")
+async def update_plan_effect(
+    version_id: int,
+    data: PlanEffectUpdate,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    更新计划版本的效果评估
+    
+    在调整执行一段时间后，评估调整效果
+    """
+    try:
+        with get_connection() as conn:
+            # 检查版本是否存在
+            result = conn.execute(text("""
+                SELECT pv.project_id, p.leader FROM project_plan_versions pv
+                JOIN projects p ON p.id = pv.project_id
+                WHERE pv.id = :vid
+            """), {"vid": version_id})
+            row = result.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="计划版本不存在")
+            
+            # 权限检查：项目负责人或管理员可以更新
+            username = current_user.get("username") or current_user.get("sub")
+            role_id = current_user.get("role_id", 15)
+            leader = row[1]
+            
+            if role_id != 11 and leader != username:
+                raise HTTPException(status_code=403, detail="无权限评估此计划版本")
+            
+            # 更新效果评估
+            conn.execute(text("""
+                UPDATE project_plan_versions SET effect_note = :note WHERE id = :vid
+            """), {"note": data.effect_note, "vid": version_id})
+            conn.commit()
+            
+            logger.info(f"更新计划版本效果评估: version_id={version_id}")
+            return {"success": True, "message": "效果评估已更新"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"更新效果评估失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============== 请假记录管理 ==============

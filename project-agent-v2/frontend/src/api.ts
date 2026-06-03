@@ -732,13 +732,24 @@ export const projectsApi = {
 // 计划相关API
 export const plansApi = {
   // 上传计划Excel
-  uploadPlan: async (projectId: number, file: File, versionName?: string, description?: string) => {
+  uploadPlan: async (
+    projectId: number, 
+    file: File, 
+    versionName?: string, 
+    description?: string,
+    changeType?: string,
+    changeReason?: string
+  ) => {
     const formData = new FormData()
     formData.append('file', file)
     
     const params = new URLSearchParams()
     if (versionName) params.append('version_name', versionName)
     if (description) params.append('description', description)
+    
+    // 添加变更追踪参数
+    if (changeType) formData.append('change_type', changeType)
+    if (changeReason) formData.append('change_reason', changeReason)
     
     const url = `/api/agent/plans/upload/${projectId}${params.toString() ? '?' + params.toString() : ''}`
     

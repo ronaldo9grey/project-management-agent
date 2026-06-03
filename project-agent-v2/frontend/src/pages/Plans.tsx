@@ -23,6 +23,10 @@ interface PlanVersion {
   file_name: string | null
   task_count: number
   is_current: boolean
+  change_type?: string | null
+  change_reason?: string | null
+  previous_status?: any
+  effect_note?: string | null
 }
 
 interface CompareResult {
@@ -77,6 +81,8 @@ export default function PlansPage() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [versionName, setVersionName] = useState('')
   const [versionDesc, setVersionDesc] = useState('')
+  const [changeType, setChangeType] = useState('初始计划')
+  const [changeReason, setChangeReason] = useState('')
   const [uploadResult, setUploadResult] = useState<any>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   
@@ -182,7 +188,14 @@ export default function PlansPage() {
     setUploadResult(null)
     
     try {
-      const result = await plansApi.uploadPlan(selectedProject.id, uploadFile, versionName, versionDesc)
+      const result = await plansApi.uploadPlan(
+        selectedProject.id, 
+        uploadFile, 
+        versionName, 
+        versionDesc,
+        changeType,
+        changeReason
+      )
       setUploadResult(result)
       // 刷新版本列表
       await loadVersions(selectedProject.id)
@@ -190,6 +203,8 @@ export default function PlansPage() {
       setUploadFile(null)
       setVersionName('')
       setVersionDesc('')
+      setChangeType('初始计划')
+      setChangeReason('')
       if (fileInputRef.current) {
         fileInputRef.current.value = ''
       }
@@ -477,6 +492,43 @@ export default function PlansPage() {
                   rows={3}
                 />
               </div>
+
+              {/* 变更类型 */}
+              <div className="form-group">
+                <label className="form-label">变更类型</label>
+                <select
+                  value={changeType}
+                  onChange={e => setChangeType(e.target.value)}
+                  className="input"
+                >
+                  <option value="初始计划">初始计划</option>
+                  <option value="目标调整">目标调整</option>
+                  <option value="路径调整">路径调整</option>
+                  <option value="偏差纠正">偏差纠正</option>
+                  <option value="资源调整">资源调整</option>
+                  <option value="其他">其他</option>
+                </select>
+                <p className="form-hint">
+                  选择本次计划调整的原因类型
+                </p>
+              </div>
+
+              {/* 变更原因 */}
+              {changeType !== '初始计划' && (
+                <div className="form-group">
+                  <label className="form-label">变更原因 *</label>
+                  <textarea
+                    value={changeReason}
+                    onChange={e => setChangeReason(e.target.value)}
+                    placeholder="例如：原计划延期7天，需压缩测试工期..."
+                    className="textarea"
+                    rows={2}
+                  />
+                  <p className="form-hint">
+                    系统将自动记录调整前状态快照
+                  </p>
+                </div>
+              )}
 
               {/* 上传结果 */}
               {uploadResult && (
