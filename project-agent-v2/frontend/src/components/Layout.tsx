@@ -15,12 +15,28 @@ export default function Layout({ children }: LayoutProps) {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [notificationUnread, setNotificationUnread] = useState(0)
 
-  // 获取未读通知数
+  // 获取未读通知数（带缓存，避免重复请求）
   useEffect(() => {
+    // 使用全局缓存，5秒内不重复请求
+    const cacheKey = 'notifications-unread'
+    const cached = window.sessionStorage.getItem(cacheKey)
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached)
+      if (Date.now() - timestamp < 5000) {
+        setNotificationUnread(data)
+        return // 5秒内有缓存，不请求
+      }
+    }
+    
     const fetchNotifications = async () => {
       try {
         const data = await notificationApi.getList(true, 1)
         setNotificationUnread(data.unread_count || 0)
+        // 缓存结果
+        window.sessionStorage.setItem(cacheKey, JSON.stringify({
+          data: data.unread_count || 0,
+          timestamp: Date.now()
+        }))
       } catch {}
     }
     fetchNotifications()

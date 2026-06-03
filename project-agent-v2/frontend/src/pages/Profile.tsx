@@ -65,7 +65,8 @@ export default function ProfilePage() {
               <a href="/agent/" className="nav-link active">个人</a>
               <a href="/agent/daily" className="nav-link">日报</a>
               <a href="/agent/projects" className="nav-link">项目</a>
-              <a href="/agent/chat" className="nav-link">问答</a>
+              <a href="/agent/tracking" className="nav-link">追踪</a>
+              <a href="/agent/quality" className="nav-link">质量</a>
               <a href="/agent/dashboard" className="nav-link">看板</a>
             </nav>
           </div>

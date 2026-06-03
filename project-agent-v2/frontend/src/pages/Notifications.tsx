@@ -121,7 +121,8 @@ export default function NotificationsPage() {
               <Link to="/" className="nav-link">个人</Link>
               <Link to="/daily" className="nav-link">日报</Link>
               <Link to="/projects" className="nav-link">项目</Link>
-              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/tracking" className="nav-link">追踪</Link>
+              <Link to="/quality" className="nav-link">质量</Link>
               <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>

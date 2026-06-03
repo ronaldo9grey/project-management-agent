@@ -368,7 +368,7 @@ export default function ProjectDetailPage() {
       if (!token) return
       
       // 获取统计信息
-      const statsRes = await fetch(`/api/agent/knowledge/stats?project_id=${projectId}`, {
+      const statsRes = await fetch(`/agent/api/agent/knowledge/stats?project_id=${projectId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       
@@ -379,7 +379,7 @@ export default function ProjectDetailPage() {
       }
       
       // 获取文档列表
-      const docsRes = await fetch(`/api/agent/knowledge/list?project_id=${projectId}&limit=10`, {
+      const docsRes = await fetch(`/agent/api/agent/knowledge/list?project_id=${projectId}&limit=10`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
       
@@ -417,7 +417,7 @@ export default function ProjectDetailPage() {
         return
       }
       
-      const res = await fetch(`/api/agent/projects/${projectId}/chat`, {
+      const res = await fetch(`/agent/api/agent/projects/${projectId}/chat`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -581,7 +581,8 @@ export default function ProjectDetailPage() {
               <Link to="/" className="nav-link">个人</Link>
               <Link to="/daily" className="nav-link">日报</Link>
               <Link to="/projects" className="nav-link active">项目</Link>
-              <Link to="/chat" className="nav-link">问答</Link>
+              <Link to="/tracking" className="nav-link">追踪</Link>
+              <Link to="/quality" className="nav-link">质量</Link>
               <Link to="/dashboard" className="nav-link">看板</Link>
             </nav>
           </div>

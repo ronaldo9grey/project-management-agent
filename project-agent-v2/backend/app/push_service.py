@@ -244,9 +244,10 @@ def push_alert_to_wechat(alert: dict, project_name: str):
 
 def push_morning_alerts():
     """
-    早上8:15推送：高风险预警汇总
+    早上8:00推送：高风险预警汇总
     推送所有高风险项目到群组
     同一项目的多个预警合并显示
+    使用数据库锁避免重复推送
     """
     # 检查是否在推送时间
     if not should_push():
@@ -258,6 +259,32 @@ def push_morning_alerts():
     except ImportError:
         from database import get_engine, text
     import os
+    from datetime import datetime, date
+    
+    engine = get_engine()
+    
+    # ========== 分布式锁：避免多 Worker 重复推送 ==========
+    with engine.connect() as conn:
+        # 检查今天是否已推送
+        result = conn.execute(text("""
+            SELECT COUNT(*) as count
+            FROM daily_push_logs
+            WHERE push_type = 'morning_alerts'
+              AND push_date = CURRENT_DATE
+        """)).fetchone()
+        
+        if result and result[0] > 0:
+            push_logger.info("今天早上预警已推送，跳过（避免重复）")
+            return False
+        
+        # 记录推送（立即提交，避免竞态）
+        conn.execute(text("""
+            INSERT INTO daily_push_logs (push_type, push_date, created_at)
+            VALUES ('morning_alerts', CURRENT_DATE, NOW())
+        """))
+        conn.commit()
+    
+    push_logger.info("开始推送早上预警...")
     
     from collections import defaultdict
     
@@ -374,9 +401,10 @@ def push_morning_alerts():
 
 def push_afternoon_reminder():
     """
-    下午17:00推送：工作日报提醒
+    下午16:00推送：工作日报提醒
     包含日报提交情况和项目进度提醒
     同一项目的延期和即将到期信息合并显示
+    使用数据库锁避免重复推送
     """
     # 检查是否在推送时间
     if not should_push():
@@ -388,13 +416,31 @@ def push_afternoon_reminder():
     except ImportError:
         from database import get_engine, text
     import os
-    
     from datetime import datetime, date
     from collections import defaultdict
     
-    
-    
     engine = get_engine()
+    
+    # ========== 分布式锁：避免多 Worker 重复推送 ==========
+    with engine.connect() as conn:
+        result = conn.execute(text("""
+            SELECT COUNT(*) as count
+            FROM daily_push_logs
+            WHERE push_type = 'afternoon_reminder'
+              AND push_date = CURRENT_DATE
+        """)).fetchone()
+        
+        if result and result[0] > 0:
+            push_logger.info("今天下午提醒已推送，跳过（避免重复）")
+            return False
+        
+        conn.execute(text("""
+            INSERT INTO daily_push_logs (push_type, push_date, created_at)
+            VALUES ('afternoon_reminder', CURRENT_DATE, NOW())
+        """))
+        conn.commit()
+    
+    push_logger.info("开始推送下午提醒...")
     
     with engine.connect() as conn:
         # 今日日报提交情况

@@ -1,6 +1,5 @@
 import SharedHeader from '../components/SharedHeader'
 import { useState, useEffect } from 'react'
-import { useAppStore } from '../store'
 import MobileNav from '../components/MobileNav'
 import DashboardTaskList from '../components/DashboardTaskList'
 import { apiClient, api } from '../api'
@@ -138,6 +137,7 @@ function MonthlyHoursCard({
   selectedMonth,
   onMonthChange,
   onExport,
+  onExportHumanCost,
   viewMode,
   onViewModeChange
 }: { 
@@ -148,6 +148,7 @@ function MonthlyHoursCard({
   selectedMonth: number
   onMonthChange: (year: number, month: number) => void
   onExport: () => void
+  onExportHumanCost: () => void
   viewMode: 'employee' | 'project'
   onViewModeChange: (mode: 'employee' | 'project') => void
 }) {
@@ -304,7 +305,20 @@ function MonthlyHoursCard({
               cursor: 'pointer'
             }}
           >
-            📥 导出
+            📥 导出工时
+          </button>
+          <button 
+            onClick={onExportHumanCost}
+            style={{
+              padding: '6px 12px',
+              borderRadius: '6px',
+              border: '1px solid #e5e7eb',
+              background: 'white',
+              fontSize: '14px',
+              cursor: 'pointer'
+            }}
+          >
+            💰 导出人力成本
           </button>
         </div>
       </div>
@@ -842,7 +856,6 @@ function MonthlyHoursCard({
 }
 
 export default function DashboardPage() {
-  const { token } = useAppStore()
   const isMobile = useIsMobile()
 
   const [stats, setStats] = useState<DashboardStats | null>(null)
@@ -872,12 +885,10 @@ export default function DashboardPage() {
   const loadDashboardData = async () => {
     setIsLoading(true)
     try {
-      const headers = { Authorization: `Bearer ${token}` }
-
       const [overviewRes, projectsRes, insightRes] = await Promise.all([
-        fetch('/api/agent/dashboard/overview', { headers }).then(r => r.json()),
-        fetch('/api/agent/dashboard/projects', { headers }).then(r => r.json()),
-        fetch('/api/agent/dashboard/insight', { headers }).then(r => r.json())
+        apiClient.get('/api/agent/dashboard/overview').then(r => r.data),
+        apiClient.get('/api/agent/dashboard/projects').then(r => r.data),
+        apiClient.get('/api/agent/dashboard/insight').then(r => r.data)
       ])
 
       setStats(overviewRes.stats)
@@ -947,7 +958,7 @@ export default function DashboardPage() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `月度工时统计_${selectedYear}年${selectedMonth}月.xlsx`
+      a.download = `正式项目工时统计_${selectedYear}年${selectedMonth}月.xlsx`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -956,6 +967,38 @@ export default function DashboardPage() {
       showToast('导出成功', 'success')
     } catch (error: any) {
       console.error('导出Excel失败:', error)
+      showToast('导出失败，请稍后重试', 'error')
+    }
+  }
+
+  // 导出人力成本Excel
+  const handleExportHumanCost = async () => {
+    const confirmed = await confirm({
+      title: '导出人力成本',
+      message: `确定要导出 ${selectedYear}年${selectedMonth}月 的人力成本数据吗？`,
+      confirmText: '确认导出',
+      cancelText: '取消',
+      type: 'info'
+    })
+    
+    if (!confirmed) return
+    
+    try {
+      showToast('正在生成Excel...', 'info')
+      const blob = await api.exportHumanCost(selectedYear, selectedMonth)
+      
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${selectedYear}年${selectedMonth}月研究院人员项目成本归集.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      showToast('导出成功', 'success')
+    } catch (error: any) {
+      console.error('导出人力成本失败:', error)
       showToast('导出失败，请稍后重试', 'error')
     }
   }
@@ -1083,6 +1126,7 @@ export default function DashboardPage() {
           selectedMonth={selectedMonth}
           onMonthChange={handleMonthChange}
           onExport={handleExportExcel}
+          onExportHumanCost={handleExportHumanCost}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
         />

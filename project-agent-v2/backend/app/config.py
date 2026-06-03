@@ -6,10 +6,40 @@ import os
 
 class Settings:
     """系统配置"""
-    # DeepSeek AI配置
+    
+    # ===== AI 模型配置（支持本地/官方切换）=====
+    # AI 提供商：deepseek（官方）或 local（本地模型）
+    AI_PROVIDER = os.getenv("AI_PROVIDER", "deepseek")
+    
+    # DeepSeek 官方 API 配置
     DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
     DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    
+    # 本地模型配置（OpenAI 兼容格式）
+    # 本地模型服务通常使用 OpenAI API 格式
+    LOCAL_MODEL_BASE_URL = os.getenv("LOCAL_MODEL_BASE_URL", "http://localhost:8000/v1")
+    LOCAL_MODEL_NAME = os.getenv("LOCAL_MODEL_NAME", "qwen2.5-7b")
+    LOCAL_MODEL_API_KEY = os.getenv("LOCAL_MODEL_API_KEY", "local")  # 本地模型通常不需要 key
+    
+    # 统一获取当前 AI 配置
+    @property
+    def AI_BASE_URL(self):
+        if self.AI_PROVIDER == "local":
+            return self.LOCAL_MODEL_BASE_URL
+        return self.DEEPSEEK_BASE_URL
+    
+    @property
+    def AI_API_KEY(self):
+        if self.AI_PROVIDER == "local":
+            return self.LOCAL_MODEL_API_KEY
+        return self.DEEPSEEK_API_KEY
+    
+    @property
+    def AI_MODEL(self):
+        if self.AI_PROVIDER == "local":
+            return self.LOCAL_MODEL_NAME
+        return self.DEEPSEEK_MODEL
     
     # Redis配置
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")

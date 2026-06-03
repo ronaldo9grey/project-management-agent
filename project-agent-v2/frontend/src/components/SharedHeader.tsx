@@ -20,12 +20,28 @@ export default function SharedHeader({ activePath }: SharedHeaderProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [notificationUnread, setNotificationUnread] = useState(0);
 
-  // 获取未读通知数
+  // 获取未读通知数（使用全局缓存，避免重复请求）
   useEffect(() => {
+    // 使用 sessionStorage 缓存，与 Layout.tsx 共享
+    const cacheKey = 'notifications-unread'
+    const cached = window.sessionStorage.getItem(cacheKey)
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached)
+      if (Date.now() - timestamp < 5000) {
+        setNotificationUnread(data)
+        return // 有缓存，不重复请求
+      }
+    }
+    
+    // 无缓存或过期，发起请求
     const fetchNotifications = async () => {
       try {
         const data = await notificationApi.getList(true, 1);
         setNotificationUnread(data.unread_count || 0);
+        window.sessionStorage.setItem(cacheKey, JSON.stringify({
+          data: data.unread_count || 0,
+          timestamp: Date.now()
+        }))
       } catch {}
     };
     fetchNotifications();

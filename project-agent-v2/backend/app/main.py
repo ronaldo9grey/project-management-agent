@@ -1233,8 +1233,9 @@ async def smart_parse_daily(
         sys.path.insert(0, os.path.dirname(__file__))
         from task_auto import parse_daily_all_in_one_threaded
         from .ai_usage_tracker import check_usage_limit, log_ai_usage
-        import httpx
         from datetime import datetime
+
+        # httpx 已在文件顶部导入，这里不需要重复导入
 
         user_id = current_user.get("employee_id", current_user.get("username"))
         username = current_user.get("name", current_user.get("username"))
@@ -1688,6 +1689,7 @@ async def get_daily_monthly_summary(
             current += timedelta(days=1)
 
         with get_connection() as conn:
+            # 查询日报数据
             result = conn.execute(text("""
                 SELECT 
                     EXTRACT(DAY FROM dr.report_date)::int as day,
@@ -1718,6 +1720,45 @@ async def get_daily_monthly_summary(
                 total_hours += hours
                 report_count += 1
 
+            # 查询请假记录
+            leave_result = conn.execute(text("""
+                SELECT 
+                    EXTRACT(DAY FROM leave_date)::int as day,
+                    leave_type,
+                    reason
+                FROM leave_records
+                WHERE employee_id = :eid
+                  AND leave_date >= :start_date
+                  AND leave_date < :end_date
+                  AND is_deleted = false
+            """), {"eid": employee_id, "start_date": start_date, "end_date": end_date})
+            
+            leave_days = {}
+            for row in leave_result:
+                day = row[0]
+                leave_days[day] = {
+                    "is_leave": True,
+                    "leave_type": row[1],
+                    "reason": row[2]
+                }
+                # 如果这一天没有日报，标记为请假
+                if day not in days:
+                    days[day] = {
+                        "has_report": False,
+                        "is_leave": True,
+                        "leave_type": row[1],
+                        "reason": row[2]
+                    }
+                else:
+                    # 有日报但也请假了（可能是半天假）
+                    days[day]["is_leave"] = True
+                    days[day]["leave_type"] = row[1]
+                    days[day]["reason"] = row[2]
+
+            # 计算缺失天数：工作日数 - 日报数 - 请假天数（无日报的请假日）
+            leave_without_report = len([d for d in leave_days if d not in [k for k in days if days[k].get("has_report")]])
+            missing_days = working_days - report_count - leave_without_report
+
             return {
                 "year": year,
                 "month": month,
@@ -1725,7 +1766,8 @@ async def get_daily_monthly_summary(
                 "working_days": working_days,  # 当月工作日数
                 "total_hours": round(total_hours, 1),  # 总工时
                 "report_count": report_count,  # 日报数
-                "missing_days": working_days - report_count  # 缺失天数
+                "leave_days": len(leave_days),  # 请假天数
+                "missing_days": max(0, missing_days)  # 缺失天数（排除请假）
             }
 
     except Exception as e:
@@ -2806,7 +2848,7 @@ async def get_monthly_employee_hours(
     current_user: Dict = Depends(get_current_user)
 ):
     """
-    获取月度人员工时统计
+    获取月度人员工时统计（仅统计正式项目工时）
 
     参数:
     - year: 年份（默认当前年）
@@ -2816,6 +2858,7 @@ async def get_monthly_employee_hours(
     - 所有员工在指定月份的工时统计
     - 按项目分组，显示每个员工在各项目的工时
     - 包含应填日报数、实填日报数、差异
+    - 注意：总工时只统计正式项目，不包含其他工作（基础工作等）
     """
     # 默认当月
     today = datetime.now().date()
@@ -2849,23 +2892,22 @@ async def get_monthly_employee_hours(
         # 员工实际填报天数
         employee_days = {row[0]: row[1] for row in days_result}
 
-        # 查询所有员工的月度工时（排除admin测试账户）
-        # 使用project_id映射正式项目名，确保口径统一
-        # 只按映射后的项目名分组，避免重复
+        # 查询正式项目的月度工时（仅统计有project_id且匹配projects表的）
         result = conn.execute(text("""
             SELECT
                 dr.employee_name,
-                COALESCE(p.name, COALESCE(NULLIF(TRIM(dwi.project_name), ''), '其他工作')) as project_name,
+                p.name as project_name,
                 SUM(dwi.hours_spent) as total_hours,
                 COUNT(DISTINCT dr.id) as report_count
             FROM daily_work_items dwi
             JOIN daily_reports dr ON dr.id = dwi.report_id
-            LEFT JOIN projects p ON p.id::text = dwi.project_id
+            JOIN projects p ON p.id::text = dwi.project_id
             WHERE dr.report_date >= :month_start
               AND dr.report_date <= :month_end
               AND dr.is_deleted = false
               AND LOWER(dr.employee_name) != 'admin'
-            GROUP BY dr.employee_name, COALESCE(p.name, COALESCE(NULLIF(TRIM(dwi.project_name), ''), '其他工作'))
+              AND dwi.project_id IS NOT NULL AND dwi.project_id != ''
+            GROUP BY dr.employee_name, p.name
             ORDER BY dr.employee_name, total_hours DESC
         """), {
             "month_start": month_start,
@@ -2881,6 +2923,7 @@ async def get_monthly_employee_hours(
             report_count = row[3] or 0
 
             if emp_name not in employee_hours:
+                filled = employee_days.get(emp_name, 0)
                 employee_hours[emp_name] = {
                     "employee_name": emp_name,
                     "projects": [],
@@ -2888,8 +2931,8 @@ async def get_monthly_employee_hours(
                     "total_hours_raw": 0,  # 原始精度累加
                     "report_count": 0,
                     "required_days": working_days,
-                    "filled_days": employee_days.get(emp_name, 0),
-                    "missing_days": working_days - employee_days.get(emp_name, 0)
+                    "filled_days": filled,
+                    "missing_days": max(0, working_days - filled)  # 加班时缺失为0，不为负数
                 }
 
             employee_hours[emp_name]["projects"].append({
@@ -2923,7 +2966,7 @@ async def get_monthly_employee_hours(
             "working_days": working_days,  # 当月工作日数
             "employee_count": len(result_list),  # 参与人数
             "employees": result_list,
-            "total_hours": round(total_hours_raw, 1),  # 总工时统一round
+            "total_hours": round(total_hours_raw, 1),  # 总工时统一round（仅正式项目）
             "total_reports": sum(e["report_count"] for e in result_list)
         }
 
@@ -3392,7 +3435,8 @@ async def export_monthly_employee_hours(
     current_user: Dict = Depends(get_current_user)
 ):
     """
-    导出月度人员工时统计为Excel（包含人员维度和项目维度两个sheet）
+    导出月度人员工时统计为Excel（包含人员维度和正式项目维度两个sheet）
+    注意：只统计正式项目工时，排除其他工作（含基础工作的项目类）
     """
     from fastapi.responses import StreamingResponse
     import io
@@ -3413,9 +3457,6 @@ async def export_monthly_employee_hours(
     
     subtotal_fill = PatternFill(start_color='DBEAFE', end_color='DBEAFE', fill_type='solid')
     subtotal_font = Font(bold=True)
-    
-    other_subtotal_fill = PatternFill(start_color='FEF9C3', end_color='FEF9C3', fill_type='solid')
-    other_subtotal_font = Font(bold=True, color='D97706')
     
     grand_total_fill = PatternFill(start_color='E0E7FF', end_color='E0E7FF', fill_type='solid')
     grand_total_font = Font(bold=True, size=12, color='6366F1')
@@ -3467,7 +3508,7 @@ async def export_monthly_employee_hours(
                 cell.border = thin_border
                 cell.alignment = Alignment(horizontal='center', vertical='center')
         
-        # Sheet2: 项目维度
+        # Sheet2: 正式项目维度（只包含正式项目，排除其他工作）
         official_rows = []
         for proj in project_data["official_projects"]:
             row_data = {"项目名称": proj["project_name"]}
@@ -3483,41 +3524,12 @@ async def export_monthly_employee_hours(
         official_subtotal["项目小计"] = project_data["official_grand_total"]
         official_rows.append(official_subtotal)
         
-        # 空行分隔
-        official_rows.append({"项目名称": ""})
-        
-        # 其他工作
-        other_rows = []
-        for proj in project_data["other_works"]:
-            row_data = {"项目名称": proj["project_name"]}
-            for emp in project_data["all_employees"]:
-                row_data[emp] = proj["members"].get(emp, "")
-            row_data["项目小计"] = proj["total_hours"]
-            other_rows.append(row_data)
-        
-        # 其他工作小计行
-        other_subtotal = {"项目名称": "【其他工作小计】"}
-        for emp in project_data["all_employees"]:
-            other_subtotal[emp] = project_data["other_employee_totals"].get(emp, "")
-        other_subtotal["项目小计"] = project_data["other_grand_total"]
-        other_rows.append(other_subtotal)
-        
-        # 合并两部分
-        all_project_rows = official_rows + other_rows
-        
-        # 总计行
-        grand_total_row = {"项目名称": "【总计】"}
-        for emp in project_data["all_employees"]:
-            grand_total_row[emp] = project_data["all_employee_totals"].get(emp, "")
-        grand_total_row["项目小计"] = project_data["grand_total"]
-        all_project_rows.append(grand_total_row)
-        
-        project_sheet = f'{project_data["year"]}年{project_data["month"]}月项目维度'
-        pd.DataFrame(all_project_rows).to_excel(writer, index=False, sheet_name=project_sheet)
+        project_sheet = f'{project_data["year"]}年{project_data["month"]}月正式项目'
+        pd.DataFrame(official_rows).to_excel(writer, index=False, sheet_name=project_sheet)
         ws2 = writer.sheets[project_sheet]
         
         # 设置列宽
-        ws2.column_dimensions['A'].width = 30
+        ws2.column_dimensions['A'].width = 35
         for i, emp in enumerate(project_data["all_employees"]):
             col_letter = chr(66 + i)  # B, C, D...
             ws2.column_dimensions[col_letter].width = 10
@@ -3533,8 +3545,6 @@ async def export_monthly_employee_hours(
         
         # 应用数据行样式
         subtotal_row_num = len(project_data["official_projects"]) + 2
-        other_subtotal_row_num = subtotal_row_num + 1 + len(project_data["other_works"]) + 1
-        grand_total_row_num = other_subtotal_row_num + 1
         
         for row_num, row in enumerate(ws2.iter_rows(min_row=2, max_row=ws2.max_row, min_col=1, max_col=len(project_data["all_employees"])+2), start=2):
             for cell in row:
@@ -3546,18 +3556,11 @@ async def export_monthly_employee_hours(
                 for cell in row:
                     cell.fill = subtotal_fill
                     cell.font = subtotal_font
-            elif row_num == other_subtotal_row_num:
-                for cell in row:
-                    cell.fill = other_subtotal_fill
-                    cell.font = other_subtotal_font
-            elif row_num == grand_total_row_num:
-                for cell in row:
-                    cell.fill = grand_total_fill
-                    cell.font = grand_total_font
 
     output.seek(0)
     
-    filename = f'月度工时统计_{employee_data["year"]}年{employee_data["month"]}月.xlsx'
+    # 修改文件名为"正式项目工时统计"
+    filename = f'正式项目工时统计_{employee_data["year"]}年{employee_data["month"]}月.xlsx'
     encoded_filename = quote(filename)
     return StreamingResponse(
         output,
@@ -5203,10 +5206,25 @@ async def upload_plan_excel(
         if response.status_code == 200:
             result = response.json()
             data = result.get("data", result)
+            
+            # 上传成功后，更新本地 project_plan_versions 表的 upload_by 为用户名字（而非工号）
+            version_id = data.get("version_id")
+            if version_id:
+                uploader_name = current_user.get("name") or current_user.get("username")
+                try:
+                    with get_connection() as conn:
+                        conn.execute(text("""
+                            UPDATE project_plan_versions SET upload_by = :name WHERE id = :vid
+                        """), {"name": uploader_name, "vid": version_id})
+                        conn.commit()
+                        logger.info(f"更新版本 {version_id} 的上传者为 {uploader_name}")
+                except Exception as e:
+                    logger.warning(f"更新上传者失败: {e}")  # 不影响主流程
+            
             return {
                 "success": True,
                 "message": f"成功导入 {data.get('task_count', 0)} 个任务",
-                "version_id": data.get("version_id"),
+                "version_id": version_id,
                 "version_number": data.get("version_number"),
                 "version_name": data.get("version_name"),
                 "task_count": data.get("task_count"),
@@ -5235,26 +5253,46 @@ async def get_plan_versions(
     project_id: int,
     current_user: Dict = Depends(get_current_user)
 ):
-    """获取项目的计划版本列表"""
-    username = current_user.get("username")
-    token = current_user.get("_raw_token") or get_user_token(username)
-
-    if not token:
-        raise HTTPException(status_code=401, detail="未找到用户认证信息")
-
+    """获取项目的计划版本列表（从本地数据库读取）"""
     try:
-        response = await http_client.get(
-            f"{settings.BACKEND_API_URL}/api/v1/plan-versions/project/{project_id}",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10.0
-        )
-
-        if response.status_code == 200:
-            result = response.json()
-            return result.get("data", result)
-        return []
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT 
+                    id, 
+                    project_id,
+                    version_number,
+                    version_name,
+                    description,
+                    upload_by,
+                    upload_time,
+                    file_name,
+                    task_count,
+                    is_current,
+                    created_at
+                FROM project_plan_versions
+                WHERE project_id = :project_id
+                ORDER BY created_at DESC
+            """), {"project_id": project_id})
+            
+            versions = []
+            for row in result:
+                versions.append({
+                    "id": row[0],
+                    "project_id": row[1],
+                    "version_number": row[2],
+                    "version_name": row[3] or "",
+                    "description": row[4] or "",
+                    "upload_by": row[5],  # 已经是名字（初始版本是负责人名字，上传版本是上传者名字）
+                    "upload_time": row[6].isoformat() if row[6] else None,
+                    "file_name": row[7] or "",
+                    "task_count": row[8] or 0,
+                    "is_current": row[9] or False,
+                    "created_at": row[10].isoformat() if row[10] else None
+                })
+            
+            return versions
     except Exception as e:
-        logger.error(f" {e}")
+        logger.error(f"获取版本列表失败: {e}")
         return []
 
 
@@ -7521,6 +7559,10 @@ async def startup_event():
     # 初始化HTTP客户端
     http_client = httpx.AsyncClient(timeout=30.0)
     
+    # ========== 定时任务：所有 Worker 注册，推送函数内部去重 ==========
+    # Gunicorn 3 个 Worker 都会触发 startup
+    # 推送函数内部使用数据库锁保证同一时间只执行一次
+    
     # 导入推送函数
     from .push_service import push_morning_alerts, push_afternoon_reminder
 
@@ -7540,11 +7582,8 @@ async def startup_event():
         replace_existing=True
     )
 
-    # 注：已删除凌晨1点的每日摘要推送，避免打扰用户
-    # 早上的高风险预警汇总（8:00）已覆盖预警功能
-
     scheduler.start()
-    logger.info("[调度器] 定时任务已启动（含每日预警检测）")
+    logger.info("[调度器] 定时任务已启动（推送去重由数据库锁保证）")
     logger.info("[HTTP客户端] 已初始化")
 
 @app.on_event("shutdown")
@@ -9857,52 +9896,648 @@ async def get_ai_usage_limits(current_user: Dict = Depends(get_current_user)):
     return {"limits": USAGE_LIMITS}
 
 
+# ============== 人力成本导出（匹配Excel模板格式）==============
+
+@app.get("/agent/api/agent/stats/human-cost-export")
+async def export_human_cost_excel(
+    year: int = None,
+    month: int = None,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    导出人力成本Excel（匹配研究院模板格式）
+    
+    Sheet1: 项目成本汇总表 - 项目、时长（天），保留所有列名和边框
+    Sheet2: 项目人工成本汇总表 - 项目维度，每行显示项目+参与人工时
+    
+    时长计算：总工时（小时） / 8
+    
+    注意：仅统计正式项目工时
+    """
+    from fastapi.responses import StreamingResponse
+    import io
+    import pandas as pd
+    from urllib.parse import quote
+    from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+    from openpyxl.utils.dataframe import dataframe_to_rows
+    from openpyxl import Workbook
+    from .holidays import calculate_working_days
+
+    # 默认当月
+    today = datetime.now().date()
+    year = year or today.year
+    month = month or today.month
+
+    month_start = datetime(year, month, 1).date()
+    month_end = (month_start + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    
+    # 计算当月工作日数（动态）
+    working_days = calculate_working_days(year, month)
+
+    with get_connection() as conn:
+        # 1. 查询员工工号映射
+        emp_mapping_result = conn.execute(text("""
+            SELECT employee_code, employee_name 
+            FROM employee_group_relations 
+            WHERE relation_type = 'member' AND employee_code IS NOT NULL
+        """))
+        name_to_code = {row[1]: row[0] for row in emp_mapping_result}
+        
+        # 2. 查询正式项目的工时数据（项目维度汇总）
+        project_result = conn.execute(text("""
+            SELECT 
+                p.name as project_name,
+                SUM(dwi.hours_spent) as total_hours
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dr.id = dwi.report_id
+            JOIN projects p ON p.id::text = dwi.project_id
+            WHERE dr.report_date >= :month_start
+              AND dr.report_date <= :month_end
+              AND dr.is_deleted = false
+              AND LOWER(dr.employee_name) != 'admin'
+              AND dwi.project_id IS NOT NULL AND dwi.project_id != ''
+            GROUP BY p.name
+            ORDER BY p.name
+        """), {"month_start": month_start, "month_end": month_end})
+        
+        project_rows = []
+        for idx, row in enumerate(project_result, start=1):
+            project_name = row[0]
+            total_hours = float(row[1] or 0)
+            days = round(total_hours / 8, 2)
+            project_rows.append({
+                "序号": idx,
+                "项目": project_name,
+                "时长（天）": days
+            })
+        
+        # 3. 查询正式项目的工时数据（项目+人员维度）
+        emp_project_result = conn.execute(text("""
+            SELECT 
+                p.name as project_name,
+                dr.employee_name,
+                SUM(dwi.hours_spent) as total_hours
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dr.id = dwi.report_id
+            JOIN projects p ON p.id::text = dwi.project_id
+            WHERE dr.report_date >= :month_start
+              AND dr.report_date <= :month_end
+              AND dr.is_deleted = false
+              AND LOWER(dr.employee_name) != 'admin'
+              AND dwi.project_id IS NOT NULL AND dwi.project_id != ''
+            GROUP BY p.name, dr.employee_name
+            ORDER BY p.name, dr.employee_name
+        """), {"month_start": month_start, "month_end": month_end})
+        
+        # 按项目分组人员工时
+        project_emp_hours = {}
+        for row in emp_project_result:
+            project_name = row[0]
+            emp_name = row[1]
+            hours = float(row[2] or 0)
+            days = round(hours / 8, 2)
+            
+            if project_name not in project_emp_hours:
+                project_emp_hours[project_name] = []
+            
+            project_emp_hours[project_name].append({
+                "工号": name_to_code.get(emp_name, ""),
+                "姓名": emp_name,
+                "时长（天）": days
+            })
+
+    # 创建Excel（使用openpyxl直接创建，保留所有列名和边框）
+    wb = Workbook()
+    
+    # 边框样式
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    # 字体样式：微软雅黑
+    font_yahei9 = Font(name='微软雅黑', size=9)
+    font_yahei9_bold = Font(name='微软雅黑', size=9, bold=True)
+    font_title = Font(name='微软雅黑', size=14, bold=True)
+    
+    center_align = Alignment(horizontal='center', vertical='center')
+    wrap_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    
+    # ==================== Sheet1: 项目成本汇总表 ====================
+    ws1 = wb.active
+    ws1.title = f"{month}月项目成本汇总表"
+    
+    # 标题行
+    ws1.merge_cells('A1:G1')
+    ws1['A1'] = f"研究院{month}月项目人工成本"
+    ws1['A1'].font = font_title
+    ws1['A1'].alignment = center_align
+    
+    # 表头（保留所有列名，行高40支持折行）
+    ws1.row_dimensions[2].height = 40
+    headers1 = ["序号", "项目", "时长（天）", "人力成本\n（工资）", "人力成本\n（社保）", "公积金", "总额"]
+    for col, header in enumerate(headers1, start=1):
+        cell = ws1.cell(row=2, column=col, value=header)
+        cell.font = font_yahei9_bold
+        cell.alignment = wrap_align
+        cell.border = thin_border
+    
+    # 数据行（只填充序号、项目、时长，其他留空但保留边框）
+    for row_idx, proj in enumerate(project_rows, start=3):
+        ws1.cell(row=row_idx, column=1, value=proj["序号"]).border = thin_border
+        ws1.cell(row=row_idx, column=2, value=proj["项目"]).border = thin_border
+        ws1.cell(row=row_idx, column=3, value=proj["时长（天）"]).border = thin_border
+        # 其他列留空但有边框
+        for col in range(4, 8):
+            ws1.cell(row=row_idx, column=col, value="").border = thin_border
+        
+        # 居中对齐 + 微软雅黑 9号
+        for col in range(1, 8):
+            cell = ws1.cell(row=row_idx, column=col)
+            cell.alignment = center_align
+            cell.font = font_yahei9
+    
+    # 设置列宽
+    ws1.column_dimensions['A'].width = 8
+    ws1.column_dimensions['B'].width = 40
+    ws1.column_dimensions['C'].width = 12
+    ws1.column_dimensions['D'].width = 14
+    ws1.column_dimensions['E'].width = 14
+    ws1.column_dimensions['F'].width = 10
+    ws1.column_dimensions['G'].width = 10
+    
+    # ==================== Sheet2: 项目人工成本汇总表 ====================
+    ws2 = wb.create_sheet(f"{month}月项目人工成本汇总表")
+    
+    # 标题行
+    ws2.merge_cells('A1:Q1')
+    ws2['A1'] = "研究院项目人工成本明细"
+    ws2['A1'].font = font_title
+    ws2['A1'].alignment = center_align
+    
+    # 表头行1（高度设置为40，支持折行）
+    ws2.row_dimensions[2].height = 40
+    headers2_row1 = ["序号", "项目", "工号", "姓名", "时长（天）", "社保", "公积金", "应发薪资", 
+                     f"工日单价\n（{month}月应出勤{working_days}天）", 
+                     "项目单人成本", "", "", "", "项目总成本", "", "", ""]
+    for col, header in enumerate(headers2_row1, start=1):
+        cell = ws2.cell(row=2, column=col, value=header)
+        cell.font = font_yahei9_bold
+        cell.alignment = wrap_align
+        cell.border = thin_border
+    
+    # 合并单元格：项目单人成本（J2:M2）、项目总成本（N2:Q2）
+    ws2.merge_cells('J2:M2')
+    ws2.merge_cells('N2:Q2')
+    
+    # 表头行2（高度设置为40，支持折行）
+    ws2.row_dimensions[3].height = 40
+    headers2_row2 = ["", "", "", "", "", "", "", "", "", 
+                     "人力成本\n（工资）", "人力成本\n（社保）", "人力成本\n（公积金）", "总额",
+                     "总人力成本\n（工资）", "总人力成本\n（社保）", "总人力成本\n（公积金）", "总额"]
+    for col, header in enumerate(headers2_row2, start=1):
+        cell = ws2.cell(row=3, column=col, value=header)
+        cell.font = font_yahei9_bold
+        cell.alignment = wrap_align
+        cell.border = thin_border
+    
+    # 数据行：项目维度，每个项目下显示所有参与人
+    row_idx = 4
+    seq = 1
+    
+    # 按项目名排序
+    sorted_projects = sorted(project_emp_hours.keys())
+    
+    for project_name in sorted_projects:
+        emp_list = project_emp_hours[project_name]
+        start_row = row_idx
+        
+        for i, emp_data in enumerate(emp_list):
+            ws2.cell(row=row_idx, column=1, value=seq).border = thin_border
+            ws2.cell(row=row_idx, column=2, value=project_name if i == 0 else "").border = thin_border
+            ws2.cell(row=row_idx, column=3, value=emp_data["工号"]).border = thin_border
+            ws2.cell(row=row_idx, column=4, value=emp_data["姓名"]).border = thin_border
+            ws2.cell(row=row_idx, column=5, value=emp_data["时长（天）"]).border = thin_border
+            
+            # 其他列留空但有边框
+            for col in range(6, 18):
+                ws2.cell(row=row_idx, column=col, value="").border = thin_border
+            
+            # 居中对齐 + 微软雅黑 9号
+            for col in range(1, 18):
+                cell = ws2.cell(row=row_idx, column=col)
+                cell.alignment = center_align
+                cell.font = font_yahei9
+            
+            row_idx += 1
+            seq += 1
+        
+        # 合并项目名称单元格（如果该项目有多人参与）
+        if len(emp_list) > 1:
+            ws2.merge_cells(f'B{start_row}:B{row_idx-1}')
+            # 合并后的单元格样式
+            merged_cell = ws2[f'B{start_row}']
+            merged_cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            merged_cell.font = font_yahei9
+            
+            # 同时合并项目总成本相关的列（N、O、P、Q）
+            ws2.merge_cells(f'N{start_row}:N{row_idx-1}')
+            ws2.merge_cells(f'O{start_row}:O{row_idx-1}')
+            ws2.merge_cells(f'P{start_row}:P{row_idx-1}')
+            ws2.merge_cells(f'Q{start_row}:Q{row_idx-1}')
+            # 设置合并后单元格样式
+            for col_letter in ['N', 'O', 'P', 'Q']:
+                cell = ws2[f'{col_letter}{start_row}']
+                cell.alignment = center_align
+                cell.font = font_yahei9
+                cell.border = thin_border
+    
+    # 添加合计行和计算行
+    # 计算总工时
+    total_days = sum(emp_data["时长（天）"] for emp_list in project_emp_hours.values() for emp_data in emp_list)
+    calc_value = round(total_days / 21.75, 2) if total_days > 0 else 0
+    
+    # 合计行
+    sum_row = row_idx
+    ws2.cell(row=sum_row, column=5, value=round(total_days, 2)).border = thin_border
+    ws2.cell(row=sum_row, column=5).font = font_yahei9_bold
+    ws2.cell(row=sum_row, column=5).alignment = center_align
+    
+    # 计算行（合计/21.75）
+    calc_row = row_idx + 1
+    ws2.cell(row=calc_row, column=5, value=calc_value).border = thin_border
+    ws2.cell(row=calc_row, column=5).font = font_yahei9_bold
+    ws2.cell(row=calc_row, column=5).alignment = center_align
+    
+    # 冻结窗格：冻结前3行（标题行+表头两行）
+    ws2.freeze_panes = 'A4'
+    
+    # 设置列宽
+    ws2.column_dimensions['A'].width = 8
+    ws2.column_dimensions['B'].width = 35
+    ws2.column_dimensions['C'].width = 12
+    ws2.column_dimensions['D'].width = 10
+    ws2.column_dimensions['E'].width = 12
+    for col in ['F', 'G', 'H', 'I']:
+        ws2.column_dimensions[col].width = 10
+    for col in ['J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q']:
+        ws2.column_dimensions[col].width = 12
+
+    # 保存到BytesIO
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    filename = f'{year}年{month}月研究院人员项目成本归集.xlsx'
+    encoded_filename = quote(filename)
+    return StreamingResponse(
+        output,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f"attachment; filename*=UTF-8''{encoded_filename}"}
+    )
+
+
+# ============== 请假记录管理 ==============
+
+class LeaveRecordCreate(BaseModel):
+    """请假记录创建"""
+    employee_id: str
+    leave_date: str  # YYYY-MM-DD
+    leave_type: str  # 年假/病假/事假/调休/婚假/产假/其他
+    reason: Optional[str] = None
+
+
+class LeaveRecordUpdate(BaseModel):
+    """请假记录更新"""
+    leave_type: Optional[str] = None
+    reason: Optional[str] = None
+
+
+@app.get("/agent/api/agent/leave/records")
+async def get_leave_records(
+    employee_id: Optional[str] = None,
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取请假记录列表
+    
+    参数：
+    - employee_id: 员工工号（管理员可查看所有，普通用户只能查看自己）
+    - year: 年份
+    - month: 月份
+    """
+    try:
+        username = current_user.get("username") or current_user.get("sub")
+        requester_id = current_user.get("employee_id") or username
+        role_id = current_user.get("role_id", 15)
+        
+        # 权限检查：管理员可查看所有，普通用户只能查看自己
+        if employee_id and employee_id != requester_id and role_id not in [11, 12]:
+            raise HTTPException(status_code=403, detail="无权限查看他人请假记录")
+        
+        # 默认查询自己
+        target_emp = employee_id or requester_id
+        
+        with get_connection() as conn:
+            sql = """
+                SELECT id, employee_id, leave_date, leave_type, reason, 
+                       created_at, created_by
+                FROM leave_records
+                WHERE is_deleted = false
+            """
+            params = {}
+            
+            if target_emp:
+                sql += " AND employee_id = :eid"
+                params["eid"] = target_emp
+            
+            if year and month:
+                start_date = f"{year}-{month:02d}-01"
+                if month == 12:
+                    end_date = f"{year + 1}-01-01"
+                else:
+                    end_date = f"{year}-{month + 1:02d}-01"
+                sql += " AND leave_date >= :start_date AND leave_date < :end_date"
+                params["start_date"] = start_date
+                params["end_date"] = end_date
+            
+            sql += " ORDER BY leave_date DESC"
+            
+            result = conn.execute(text(sql), params)
+            records = []
+            for row in result:
+                records.append({
+                    "id": row[0],
+                    "employee_id": row[1],
+                    "leave_date": str(row[2]),
+                    "leave_type": row[3],
+                    "reason": row[4],
+                    "created_at": str(row[5]),
+                    "created_by": row[6]
+                })
+            
+            return {"records": records}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"获取请假记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/api/agent/leave/records")
+async def create_leave_record(
+    data: LeaveRecordCreate,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    创建请假记录
+    
+    权限：管理员可创建所有，普通用户只能创建自己的
+    """
+    try:
+        username = current_user.get("username") or current_user.get("sub")
+        requester_id = current_user.get("employee_id") or username
+        role_id = current_user.get("role_id", 15)
+        
+        # 权限检查
+        if data.employee_id != requester_id and role_id not in [11, 12]:
+            raise HTTPException(status_code=403, detail="无权限为他人创建请假记录")
+        
+        # 验证请假类型
+        valid_types = ["年假", "病假", "事假", "调休", "婚假", "产假", "其他"]
+        if data.leave_type not in valid_types:
+            raise HTTPException(status_code=400, detail=f"无效的请假类型，可选：{', '.join(valid_types)}")
+        
+        # 验证日期格式
+        try:
+            leave_date = datetime.strptime(data.leave_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="日期格式错误，应为 YYYY-MM-DD")
+        
+        with get_connection() as conn:
+            # 检查是否已存在
+            existing = conn.execute(text("""
+                SELECT id FROM leave_records 
+                WHERE employee_id = :eid AND leave_date = :date AND is_deleted = false
+            """), {"eid": data.employee_id, "date": data.leave_date})
+            
+            if existing.fetchone():
+                raise HTTPException(status_code=400, detail="该日期已存在请假记录")
+            
+            # 插入记录
+            result = conn.execute(text("""
+                INSERT INTO leave_records (employee_id, leave_date, leave_type, reason, created_by)
+                VALUES (:eid, :date, :type, :reason, :created_by)
+                RETURNING id
+            """), {
+                "eid": data.employee_id,
+                "date": data.leave_date,
+                "type": data.leave_type,
+                "reason": data.reason,
+                "created_by": requester_id
+            })
+            conn.commit()
+            
+            record_id = result.fetchone()[0]
+            logger.info(f"创建请假记录: id={record_id}, employee={data.employee_id}, date={data.leave_date}")
+            
+            return {"success": True, "id": record_id, "message": "请假记录创建成功"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"创建请假记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/agent/api/agent/leave/records/{record_id}")
+async def update_leave_record(
+    record_id: int,
+    data: LeaveRecordUpdate,
+    current_user: Dict = Depends(get_current_user)
+):
+    """更新请假记录"""
+    try:
+        username = current_user.get("username") or current_user.get("sub")
+        requester_id = current_user.get("employee_id") or username
+        role_id = current_user.get("role_id", 15)
+        
+        with get_connection() as conn:
+            # 检查记录是否存在
+            existing = conn.execute(text("""
+                SELECT employee_id FROM leave_records 
+                WHERE id = :id AND is_deleted = false
+            """), {"id": record_id})
+            row = existing.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="请假记录不存在")
+            
+            # 权限检查
+            if row[0] != requester_id and role_id not in [11, 12]:
+                raise HTTPException(status_code=403, detail="无权限修改他人请假记录")
+            
+            # 更新
+            update_fields = []
+            params = {"id": record_id}
+            
+            if data.leave_type:
+                valid_types = ["年假", "病假", "事假", "调休", "婚假", "产假", "其他"]
+                if data.leave_type not in valid_types:
+                    raise HTTPException(status_code=400, detail=f"无效的请假类型")
+                update_fields.append("leave_type = :type")
+                params["type"] = data.leave_type
+            
+            if data.reason is not None:
+                update_fields.append("reason = :reason")
+                params["reason"] = data.reason
+            
+            if not update_fields:
+                return {"success": True, "message": "无更新内容"}
+            
+            sql = f"UPDATE leave_records SET {', '.join(update_fields)} WHERE id = :id"
+            conn.execute(text(sql), params)
+            conn.commit()
+            
+            return {"success": True, "message": "更新成功"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"更新请假记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/agent/api/agent/leave/records/{record_id}")
+async def delete_leave_record(
+    record_id: int,
+    current_user: Dict = Depends(get_current_user)
+):
+    """删除请假记录（软删除）"""
+    try:
+        username = current_user.get("username") or current_user.get("sub")
+        requester_id = current_user.get("employee_id") or username
+        role_id = current_user.get("role_id", 15)
+        
+        with get_connection() as conn:
+            # 检查记录是否存在
+            existing = conn.execute(text("""
+                SELECT employee_id FROM leave_records 
+                WHERE id = :id AND is_deleted = false
+            """), {"id": record_id})
+            row = existing.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="请假记录不存在")
+            
+            # 权限检查
+            if row[0] != requester_id and role_id not in [11, 12]:
+                raise HTTPException(status_code=403, detail="无权限删除他人请假记录")
+            
+            # 软删除
+            conn.execute(text("""
+                UPDATE leave_records SET is_deleted = true WHERE id = :id
+            """), {"id": record_id})
+            conn.commit()
+            
+            logger.info(f"删除请假记录: id={record_id}")
+            return {"success": True, "message": "删除成功"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"删除请假记录失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/api/agent/leave/summary")
+async def get_leave_summary(
+    year: int,
+    month: int,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取请假统计摘要（管理员专用）
+    
+    返回：员工请假统计列表
+    """
+    try:
+        role_id = current_user.get("role_id", 15)
+        if role_id not in [11, 12]:
+            raise HTTPException(status_code=403, detail="无权限查看请假统计")
+        
+        start_date = f"{year}-{month:02d}-01"
+        if month == 12:
+            end_date = f"{year + 1}-01-01"
+        else:
+            end_date = f"{year}-{month + 1:02d}-01"
+        
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT 
+                    lr.employee_id,
+                    e.name as employee_name,
+                    COUNT(*) as leave_count,
+                    json_agg(json_build_object(
+                        'date', lr.leave_date,
+                        'type', lr.leave_type,
+                        'reason', lr.reason
+                    ) ORDER BY lr.leave_date) as leave_details
+                FROM leave_records lr
+                LEFT JOIN employees e ON e.employee_id = lr.employee_id
+                WHERE lr.leave_date >= :start_date 
+                  AND lr.leave_date < :end_date
+                  AND lr.is_deleted = false
+                GROUP BY lr.employee_id, e.name
+                ORDER BY leave_count DESC
+            """), {"start_date": start_date, "end_date": end_date})
+            
+            summaries = []
+            for row in result:
+                summaries.append({
+                    "employee_id": row[0],
+                    "employee_name": row[1] or row[0],
+                    "leave_count": row[2],
+                    "leave_details": row[3]
+                })
+            
+            return {"summaries": summaries}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"获取请假统计失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # 文件末尾保留（勿删除）
 
-
-# ============== 前后端耦合：静态文件服务 ==============
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-import pathlib
-
-STATIC_DIR = pathlib.Path(__file__).parent / "static"
-
-# 所有API路由已在上面定义，最后挂载静态文件
-# 注意：顺序很重要，API路由先匹配，静态文件兜底
-
-# 挂载 assets 目录
-if (STATIC_DIR / "assets").exists():
-    app.mount("/agent/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
-
-# SPA 兜底：所有未匹配的请求返回 index.html
-@app.get("/agent/{path:path}")
-async def serve_spa(path: str):
-    """SPA路由兜底，返回index.html让前端路由处理"""
-    from fastapi.responses import Response
-    
-    # 如果是API请求但没匹配到，返回404
-    if path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="API endpoint not found")
-    
-    # 其他请求返回 index.html（让 React Router 处理）
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        response = FileResponse(str(index_file))
-        # 禁止缓存，确保每次获取最新版本
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        response.headers["Pragma"] = "no-cache"
-        response.headers["Expires"] = "0"
-        return response
-    raise HTTPException(status_code=404, detail="Frontend not found")
-
-# 根路径重定向
-@app.get("/agent")
-async def root():
-    """根路径重定向到登录页"""
-    index_file = STATIC_DIR / "index.html"
-    if index_file.exists():
-        response = FileResponse(str(index_file))
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
-        return response
-    raise HTTPException(status_code=404, detail="Frontend not found")
+# ============== 前后端分离：静态资源由 Nginx 直接服务 ==============
+# 静态文件（/agent/assets/*, /agent/index.html 等）已由 Nginx 直接服务
+# 后端只处理 /agent/api/* 路由
+# 如需回退到后端服务静态文件，恢复以下代码：
+#
+# from fastapi.staticfiles import StaticFiles
+# from fastapi.responses import FileResponse
+# import pathlib
+# STATIC_DIR = pathlib.Path(__file__).parent / "static"
+# if (STATIC_DIR / "assets").exists():
+#     app.mount("/agent/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+# @app.get("/agent/{path:path}")
+# async def serve_spa(path: str):
+#     if path.startswith("api/"):
+#         raise HTTPException(status_code=404, detail="API endpoint not found")
+#     index_file = STATIC_DIR / "index.html"
+#     if index_file.exists():
+#         return FileResponse(str(index_file), headers={"Cache-Control": "no-cache"})
+#     raise HTTPException(status_code=404, detail="Frontend not found")
+# @app.get("/agent")
+# async def root():
+#     index_file = STATIC_DIR / "index.html"
+#     if index_file.exists():
+#         return FileResponse(str(index_file), headers={"Cache-Control": "no-cache"})
+#     raise HTTPException(status_code=404, detail="Frontend not found")
 

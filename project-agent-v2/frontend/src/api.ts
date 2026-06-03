@@ -51,7 +51,8 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   // 添加取消令牌
   const requestKey = `${config.method}:${config.url}`
   const source = axios.CancelToken.source()
-  config.cancelToken = source.token
+  // DISABLED: 取消请求会导致 ERR_CONNECTION_RESET
+  // config.cancelToken = source.token
   pendingRequests.set(requestKey, source)
   
   // 【关键】直接从 localStorage 读取 token（不用 try-catch，避免静默失败）
@@ -131,8 +132,8 @@ apiClient.interceptors.response.use(
       if (originalRequest._retry === undefined || originalRequest._retry < maxRetry) {
         originalRequest._retry = (originalRequest._retry || 0) + 1
         
-        // 第一次 0.5 秒（快速重建连接），第二次 1 秒
-        const delay = originalRequest._retry === 1 ? 500 : 1000
+        // 优化延迟：第一次 100ms，第二次 200ms（原 500ms+1000ms 太慢）
+        const delay = originalRequest._retry === 1 ? 100 : 200
         
         if (import.meta.env.DEV) {
           console.log(`[Network] 连接断开，${delay}ms 后自动重试 (${originalRequest._retry}/${maxRetry})`)
@@ -1132,6 +1133,14 @@ export const api = {
 
   exportMonthlyEmployeeHours: async (year?: number, month?: number) => {
     const res = await apiClient.get('/api/agent/stats/monthly-employee-hours/export', {
+      params: { year, month },
+      responseType: 'blob'
+    })
+    return res.data as Blob
+  },
+
+  exportHumanCost: async (year?: number, month?: number) => {
+    const res = await apiClient.get('/api/agent/stats/human-cost-export', {
       params: { year, month },
       responseType: 'blob'
     })

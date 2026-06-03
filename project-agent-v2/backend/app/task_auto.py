@@ -8,6 +8,13 @@ import asyncio
 from datetime import date, datetime
 from typing import Optional, Dict, List, Tuple, Any, Callable
 from concurrent.futures import ThreadPoolExecutor
+
+try:
+    from .config import settings
+except ImportError:
+    # 当直接导入时使用绝对导入
+    from config import settings
+
 from functools import wraps
 
 try:
@@ -20,11 +27,63 @@ except ImportError:
 
 import httpx
 
+
+def fix_json_string(json_str: str) -> str:
+    """
+    修复 AI 返回的 JSON 格式错误
+    常见问题：缺少逗号分隔符、浮点数格式错误
+    """
+    import re
+    
+    # 尝试直接解析，如果成功则不需要修复
+    try:
+        json.loads(json_str)
+        return json_str
+    except json.JSONDecodeError:
+        pass
+    
+    fixed = json_str
+    
+    # 修复策略：在换行后缺少逗号的情况
+    # 模式：值后面换行，然后是下一个键，缺少逗号
+    # 例如："content": "xxx"\n      "project" → "content": "xxx",\n      "project"
+    
+    # 1. 字符串值后缺少逗号："\n      " → ",\n      "
+    fixed = re.sub(r'"\s*\n(\s*)"', r'",\n\1"', fixed)
+    
+    # 2. 数字值后缺少逗号（包括浮点数）：\d(.?\d*)\n      " → \d(.?\d*),\n      "
+    fixed = re.sub(r'(\d(?:\.\d+)?)\s*\n(\s*)"', r'\1,\n\2"', fixed)
+    
+    # 3. 布尔值后缺少逗号：true/false\n → true/false,\n
+    fixed = re.sub(r'(true|false|null)\s*\n(\s*)"', r'\1,\n\2"', fixed, flags=re.IGNORECASE)
+    
+    # 4. 对象结束符后缺少逗号：}\n      { → },\n      {
+    fixed = re.sub(r'\}\s*\n(\s*)\{', r'},\n\1{', fixed)
+    
+    # 5. 对象结束符后缺少逗号（数组中）：}\n      { 或 }\n      "
+    fixed = re.sub(r'\}\s*\n(\s*)("|\{)', r'},\n\1\2', fixed)
+    
+    # 6. 数组结束符后缺少逗号：]\n      { → ],\n      {
+    fixed = re.sub(r'\]\s*\n(\s*)\{', r'],\n\1{', fixed)
+    
+    # 7. 数组结束符后缺少逗号：]\n      " → ],\n      "
+    fixed = re.sub(r'\]\s*\n(\s*)"', r'],\n\1"', fixed)
+    
+    # 8. 尝试处理更复杂的换行情况（多行空格）
+    fixed = re.sub(r'"\s+\n\s+"', r'",\n"', fixed)
+    fixed = re.sub(r'(\d)\s+\n\s+"', r'\1,\n"', fixed)
+    
+    # 9. 处理数组中对象的逗号问题
+    # },\n      { 可能被误写为 }\n      {
+    # 已在规则4处理，但加强一下
+    fixed = re.sub(r'\}\s*\n\s*\{', r'},\n{', fixed)
+    
+    return fixed
+
+
 # AI 调用专用线程池（最多5个并发AI请求）
 AI_EXECUTOR = ThreadPoolExecutor(max_workers=5, thread_name_prefix="ai_worker")
 
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 
 
 def run_sync_ai_in_thread(func: Callable) -> Callable:
@@ -163,18 +222,18 @@ def _match_task_by_content_ai_sync(work_content: str, project_id: int, project_n
 
     try:
         # 使用同步 httpx 客户端（线程安全）
-        url = "https://api.deepseek.com/v1/chat/completions"
+        url = f"{settings.AI_BASE_URL}/chat/completions"
         ai_logger.debug(f"调用 DeepSeek API (线程池): {url}")
         
         with httpx.Client(timeout=15.0) as client:
             response = client.post(
                 url,
                 headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Authorization": f"Bearer {settings.AI_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+                    "model": settings.AI_MODEL,
                     "messages": [
                         {"role": "system", "content": "你是一个精确的任务匹配助手，只返回 JSON 格式结果。"},
                         {"role": "user", "content": prompt}
@@ -276,18 +335,18 @@ def _batch_match_tasks_ai_sync(
 不要返回任何解释，只返回 JSON 数组。"""
 
     try:
-        url = "https://api.deepseek.com/v1/chat/completions"
+        url = f"{settings.AI_BASE_URL}/chat/completions"
         ai_logger.debug(f"批量匹配调用 DeepSeek API (线程池): {len(work_items)} 条工作事项")
         
         with httpx.Client(timeout=20.0) as client:
             response = client.post(
                 url,
                 headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                    "Authorization": f"Bearer {settings.AI_API_KEY}",
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+                    "model": settings.AI_MODEL,
                     "messages": [
                         {"role": "system", "content": "你是一个精确的任务匹配助手，只返回 JSON 数组格式结果。"},
                         {"role": "user", "content": prompt}
@@ -744,6 +803,36 @@ def get_all_projects_with_tasks() -> List[Dict]:
         return projects
 
 
+def filter_projects_by_keywords(user_input: str, projects: list) -> list:
+    """
+    简单关键词匹配，筛选相关项目
+    """
+    # 提取关键词
+    keywords = []
+    for kw in ["隆林", "田林", "靖锰", "百矿", "矿机", "氧化铝输送", "净化", "除尘", 
+               "风机", "电动阀", "PLC", "配电", "电缆", "余热发电", "碳素", 
+               "空压机", "整流", "阳极组装", "自动化", "输送", "调试"]:
+        if kw in user_input:
+            keywords.append(kw)
+    
+    if not keywords:
+        return projects  # 无关键词，返回全部
+    
+    # 简单匹配：项目名包含任一关键词
+    matched = []
+    for p in projects:
+        for kw in keywords:
+            if kw in p["name"]:
+                matched.append(p)
+                break
+    
+    if matched:
+        ai_logger.info(f"关键词筛选：{len(projects)}→{len(matched)}个 (关键词: {keywords})")
+        return matched[:12]  # 最多12个
+    
+    return projects
+
+
 async def parse_daily_all_in_one(
     user_input: str,
     report_date: str = None
@@ -758,7 +847,10 @@ async def parse_daily_all_in_one(
     返回：标准化的 JSON 结构
     """
     # 获取所有项目和任务
-    projects = get_all_projects_with_tasks()
+    all_projects = get_all_projects_with_tasks()
+    
+    # 预筛选可能匹配的项目，减少AI输入token
+    projects = filter_projects_by_keywords(user_input, all_projects)
     
     # 构建项目任务列表文本
     project_list_text = []
@@ -848,29 +940,37 @@ async def parse_daily_all_in_one(
 - confidence 表示匹配置信度（0-1）"""
 
     try:
-        url = "https://api.deepseek.com/v1/chat/completions"
+        url = f"{settings.AI_BASE_URL}/chat/completions"
         ai_logger.info(f"一次性解析日报，项目数: {len(projects)}, 输入长度: {len(user_input)}")
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                url,
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-flash"),
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt}
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 2000
-                }
-            )
+        # 最多重试2次
+        max_retries = 2
+        for retry in range(max_retries):
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    url,
+                    headers={
+                        "Authorization": f"Bearer {settings.AI_API_KEY}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": settings.AI_MODEL,
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_prompt}
+                        ],
+                        "temperature": 0.1,
+                        "max_tokens": 2000,
+                        # 关闭思考模式，避免 reasoning_content 干扰 JSON 输出
+                        "thinking": {"type": "disabled"}
+                    }
+                )
             
             if response.status_code != 200:
                 ai_logger.error(f"AI调用失败: {response.status_code} - {response.text[:200]}")
+                if retry < max_retries - 1:
+                    ai_logger.info(f"重试 {retry + 2}/{max_retries}")
+                    continue
                 return {
                     "success": False,
                     "entries": [],
@@ -884,16 +984,39 @@ async def parse_daily_all_in_one(
             json_match = re.search(r'\{[\s\S]*\}', content)
             if not json_match:
                 ai_logger.error(f"AI返回格式错误: {content[:200]}")
+                if retry < max_retries - 1:
+                    ai_logger.info(f"重试 {retry + 2}/{max_retries}")
+                    continue
                 return {
                     "success": False,
                     "entries": [],
                     "warnings": ["AI返回格式错误"]
                 }
             
-            ai_result = json.loads(json_match.group())
+            # 尝试解析，如果失败则尝试修复 JSON 格式
+            raw_json = json_match.group()
+            try:
+                ai_result = json.loads(raw_json)
+            except json.JSONDecodeError as e:
+                ai_logger.warning(f"JSON解析失败，尝试修复: {e}")
+                fixed_json = fix_json_string(raw_json)
+                try:
+                    ai_result = json.loads(fixed_json)
+                    ai_logger.info("JSON修复成功")
+                except json.JSONDecodeError as e2:
+                    ai_logger.error(f"JSON修复后仍失败: {e2}")
+                    ai_logger.error(f"原始JSON内容（前2000字符）: {raw_json[:2000]}")
+                    if retry < max_retries - 1:
+                        ai_logger.info(f"重试 {retry + 2}/{max_retries}")
+                        continue
+                    return {
+                        "success": False,
+                        "entries": [],
+                        "warnings": [f"JSON格式错误，请重新输入或简化内容"]
+                    }
             
             # 验证并修复结果
-            validated_result = validate_ai_result(ai_result, projects)
+            validated_result = validate_ai_result(ai_result, all_projects)
             
             ai_logger.info(f"AI解析成功: {len(validated_result.get('entries', []))} 条工作事项")
             

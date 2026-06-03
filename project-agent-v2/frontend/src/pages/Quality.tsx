@@ -203,7 +203,7 @@ export default function QualityPage() {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 60000)
       
-      const res = await fetch(`/api/agent/quality/analysis/${projectId}`, {
+      const res = await fetch(`/agent/api/agent/quality/analysis/${projectId}`, {
         headers: { Authorization: `Bearer ${token}` },
         signal: controller.signal
       })
