@@ -875,11 +875,15 @@ export default function DashboardPage() {
   const [projectHoursData, setProjectHoursData] = useState<ProjectHoursData | null>(null)
   const [projectHoursLoading, setProjectHoursLoading] = useState(false)
   const [viewMode, setViewMode] = useState<'employee' | 'project'>('project')
+  
+  // 待评估版本状态
+  const [pendingVersions, setPendingVersions] = useState<any[]>([])
 
   useEffect(() => {
     loadDashboardData()
     loadMonthlyHoursData(selectedYear, selectedMonth)
     loadProjectHoursData(selectedYear, selectedMonth)
+    loadPendingVersions()
   }, [])
 
   const loadDashboardData = async () => {
@@ -907,10 +911,20 @@ export default function DashboardPage() {
     try {
       const data = await api.getMonthlyEmployeeHours(year, month)
       setMonthlyHoursData(data)
-    } catch (error: any) {
+    } catch (error) {
       console.error('加载月度工时数据失败:', error)
     } finally {
       setMonthlyHoursLoading(false)
+    }
+  }
+  
+  // 加载待评估版本
+  const loadPendingVersions = async () => {
+    try {
+      const res = await apiClient.get('/api/agent/plan-versions/pending-evaluation')
+      setPendingVersions(res.data.versions || [])
+    } catch (error) {
+      console.error('加载待评估版本失败:', error)
     }
   }
   
@@ -1112,6 +1126,65 @@ export default function DashboardPage() {
                 <p key={i} style={{ margin: i === 0 ? 0 : '12px 0 0 0', lineHeight: '1.8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {line}
                 </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 待评估版本提醒 */}
+        {pendingVersions.length > 0 && (
+          <div style={{ 
+            background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', 
+            borderRadius: '8px', 
+            border: '1px solid #f59e0b',
+            marginBottom: '20px',
+            padding: '16px 20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '24px' }}>⚠️</span>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600', color: '#92400e' }}>
+                计划调整效果评估提醒
+              </h3>
+            </div>
+            <div style={{ fontSize: '14px', color: '#78350f' }}>
+              {pendingVersions.length} 个计划版本已调整超过7天，请评估调整效果
+            </div>
+            <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {pendingVersions.slice(0, 3).map((v: any) => (
+                <div key={v.id} style={{ 
+                  background: 'white', 
+                  padding: '12px', 
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '12px'
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: '#374151' }}>
+                      {v.project_name} - {v.version_name}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                      {v.change_type} | 上传于 {v.upload_time} ({v.days_ago}天前)
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      window.location.href = `/agent/plans?project_id=${v.project_id}`
+                    }}
+                    style={{
+                      padding: '6px 12px',
+                      background: '#f59e0b',
+                      color: 'white',
+                      borderRadius: '4px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: '13px'
+                    }}
+                  >
+                    去评估
+                  </button>
+                </div>
               ))}
             </div>
           </div>

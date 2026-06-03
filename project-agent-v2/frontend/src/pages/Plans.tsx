@@ -398,8 +398,9 @@ export default function PlansPage() {
                 ) : (
                   <div className="space-y-3">
                     {versions.map(v => (
-                      <div key={v.id} className="list-item">
-                        <div className="flex items-center justify-between">
+                      <div key={v.id} className="list-item" style={{ padding: '16px' }}>
+                        {/* 基本信息 */}
+                        <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-3">
                             <span className="text-2xl">📋</span>
                             <div>
@@ -427,6 +428,99 @@ export default function PlansPage() {
                             <div>{v.upload_by || ''}</div>
                           </div>
                         </div>
+                        
+                        {/* 变更追踪信息 */}
+                        {v.change_type && (
+                          <div style={{ 
+                            marginTop: '12px', 
+                            padding: '12px', 
+                            background: v.change_type === '初始计划' ? '#f0f9ff' : '#fef3c7',
+                            borderRadius: '8px',
+                            fontSize: '14px'
+                          }}>
+                            <div className="flex items-center gap-2 mb-2">
+                              {/* 变更类型标签 */}
+                              <span style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                background: v.change_type === '初始计划' ? '#dbeafe' :
+                                           v.change_type === '偏差纠正' ? '#fee2e2' :
+                                           v.change_type === '目标调整' ? '#fef3c7' : '#e0e7ff',
+                                color: v.change_type === '初始计划' ? '#1e40af' :
+                                       v.change_type === '偏差纠正' ? '#dc2626' :
+                                       v.change_type === '目标调整' ? '#d97706' : '#6366f1',
+                                fontWeight: 500
+                              }}>
+                                {v.change_type}
+                              </span>
+                              
+                              {/* 变更原因 */}
+                              {v.change_reason && (
+                                <span className="text-gray-700">• {v.change_reason}</span>
+                              )}
+                            </div>
+                            
+                            {/* 调整前状态 */}
+                            {v.previous_status && (
+                              <div style={{ color: '#6b7280', fontSize: '13px' }}>
+                                <span>调整前状态：</span>
+                                <span>进度 {v.previous_status.avg_progress || 0}%</span>
+                                <span style={{ margin: '0 8px' }}>|</span>
+                                <span style={{ color: v.previous_status.delayed_tasks > 0 ? '#dc2626' : '#16a34a' }}>
+                                  延期 {v.previous_status.delayed_tasks || 0} 个任务
+                                </span>
+                                <span style={{ margin: '0 8px' }}>|</span>
+                                <span>完成 {v.previous_status.completed_tasks || 0} 个</span>
+                              </div>
+                            )}
+                            
+                            {/* 效果评估 */}
+                            {v.effect_note && (
+                              <div style={{ marginTop: '8px', color: '#059669', fontSize: '13px' }}>
+                                <span>✅ 效果评估：{v.effect_note}</span>
+                              </div>
+                            )}
+                            
+                            {/* 效果评估按钮（非初始计划、无评估、上传超过7天） */}
+                            {v.change_type !== '初始计划' && !v.effect_note && v.upload_time && 
+                             (new Date().getTime() - new Date(v.upload_time).getTime() > 7 * 24 * 60 * 60 * 1000) && (
+                              <div style={{ marginTop: '8px' }}>
+                                <button 
+                                  style={{
+                                    padding: '4px 12px',
+                                    fontSize: '13px',
+                                    background: '#f59e0b',
+                                    color: 'white',
+                                    borderRadius: '4px',
+                                    border: 'none',
+                                    cursor: 'pointer'
+                                  }}
+                                  onClick={() => {
+                                    const note = prompt('请输入效果评估（例如：延期任务已追回，按期完成）');
+                                    if (note) {
+                                      // 调用效果评估API
+                                      fetch(`/agent/api/agent/plan-versions/${v.id}/effect`, {
+                                        method: 'PUT',
+                                        headers: {
+                                          'Content-Type': 'application/json',
+                                          'Authorization': `Bearer ${useAppStore.getState().token}`
+                                        },
+                                        body: JSON.stringify({ effect_note: note })
+                                      }).then(res => res.json()).then(data => {
+                                        if (data.success) {
+                                          // 刷新版本列表
+                                          loadVersions(selectedProject!.id);
+                                        }
+                                      });
+                                    }
+                                  }}
+                                >
+                                  📝 评估效果
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

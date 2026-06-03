@@ -2842,6 +2842,68 @@ async def get_team_work_hours(current_user: Dict = Depends(get_current_user)):
 from .holidays import calculate_working_days
 
 @app.get("/agent/api/agent/stats/monthly-employee-hours")
+@app.get("/agent/api/agent/plan-versions/pending-evaluation")
+async def get_pending_evaluation_versions(
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取待评估的计划版本列表
+    
+    条件：
+    1. 非初始计划（change_type != '初始计划'）
+    2. 无效果评估（effect_note IS NULL）
+    3. 上传超过7天
+    """
+    try:
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT 
+                    pv.id,
+                    pv.project_id,
+                    pv.version_number,
+                    pv.version_name,
+                    pv.change_type,
+                    pv.change_reason,
+                    pv.upload_time,
+                    pv.upload_by,
+                    p.name as project_name,
+                    pv.previous_status
+                FROM project_plan_versions pv
+                JOIN projects p ON p.id = pv.project_id
+                WHERE pv.change_type != '初始计划'
+                  AND pv.effect_note IS NULL
+                  AND pv.upload_time < NOW() - INTERVAL '7 days'
+                  AND p.is_deleted = false
+                ORDER BY pv.upload_time DESC
+            """))
+            
+            versions = []
+            for row in result:
+                # 计算距今天数
+                upload_time = row[6]
+                days_ago = (datetime.now() - upload_time).days if upload_time else 0
+                
+                versions.append({
+                    "id": row[0],
+                    "project_id": row[1],
+                    "version_number": row[2],
+                    "version_name": row[3],
+                    "change_type": row[4],
+                    "change_reason": row[5],
+                    "upload_time": str(row[6]),
+                    "upload_by": row[7],
+                    "project_name": row[8],
+                    "previous_status": row[9],
+                    "days_ago": days_ago
+                })
+            
+            return {"versions": versions}
+    
+    except Exception as e:
+        logger.exception(f"获取待评估版本失败: {e}")
+        return {"versions": []}
+
+
 async def get_monthly_employee_hours(
     year: int = None,
     month: int = None,
