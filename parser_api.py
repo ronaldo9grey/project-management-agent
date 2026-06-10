@@ -76,6 +76,13 @@ PROJECT_ALIAS_MAP = {
     # 其他项目别名
     "隆林铝厂净化系统": "隆林铝厂净化系统自动化控制项目",
     "净化系统自动化": "隆林铝厂净化系统自动化控制项目",
+    # 田阳铝厂阳极组装项目（区分两个项目）
+    "阳极组装提质": "田阳铝厂阳极组装提质增效项目的技术研究",
+    "阳极组装提质增效": "田阳铝厂阳极组装提质增效项目的技术研究",
+    "田阳铝厂阳极组装提质": "田阳铝厂阳极组装提质增效项目的技术研究",
+    "提质增效反馈会议": "田阳铝厂阳极组装提质增效项目的技术研究",
+    "阳极组装新增": "田阳铝厂阳极组装新增抓斗料破碎系统",
+    "抓斗破碎": "田阳铝厂阳极组装新增抓斗料破碎系统",
 }
 
 class ParseRequest(BaseModel):
@@ -179,7 +186,7 @@ PARSE_PROMPT_7B = '''从日报文本中提取工作条目，输出JSON。
 '''
 
 
-def match_project_and_task(project_hint: str, full_content: str = "") -> Dict:
+def match_project_and_task(project_hint: str, full_content: str = "", report_date: str = "") -> Dict:
     """
     匹配项目和任务
     返回: {
@@ -342,24 +349,58 @@ def match_project_and_task(project_hint: str, full_content: str = "") -> Dict:
             task_results = collection.query(
                 query_texts=[full_content],
                 where={"$and": [{"project_id": result["project_id"]}, {"type": "task"}]},
-                n_results=10
+                n_results=15  # 增加候选数量，便于月份过滤
             )
             
             if task_results and task_results['distances'] and task_results['distances'][0]:
                 logger.info(f"[任务匹配结果] 找到 {len(task_results['distances'][0])} 个候选")
                 
-                # 收集所有候选任务（用于关键词匹配验证）
+                # ⚠️ 新增：月份过滤（对于按月份分组的项目）
+                # 提取report_date的月份
+                report_month = None
+                if report_date:
+                    try:
+                        from datetime import datetime
+                        report_month = datetime.strptime(report_date, "%Y-%m-%d").month
+                        logger.info(f"[月份过滤] 日报月份: {report_month}月")
+                    except:
+                        pass
+                
+                # 收集所有候选任务（用于关键词匹配验证 + 月份过滤）
                 candidates = []
-                for i, distance in enumerate(task_results['distances'][0][:5]):
+                for i, distance in enumerate(task_results['distances'][0][:10]):
                     similarity = 1 - distance
                     meta = task_results['metadatas'][0][i]
                     doc = task_results['documents'][0][i]
                     logger.info(f"  候选{i+1}: {doc} (similarity={similarity:.2f})")
                     
                     if similarity > 0.55:
+                        task_name = meta.get('task_name', doc)
+                        
+                        # ⚠️ 月份过滤：从task_name提取月份
+                        if report_month:
+                            # 提取任务名中的月份（如"3. 2026年6月技术服务"中的"6月"）
+                            month_match = re.search(r'[\.．]\s*2026年(\d+)月|(\d+)月', task_name)
+                            if month_match:
+                                task_month = int(month_match.group(1) or month_match.group(2))
+                                if task_month != report_month:
+                                    logger.info(f"    [月份过滤] 排除: {task_name} (任务月份{task_month} ≠ 日报月份{report_month})")
+                                    continue
+                            else:
+                                # 无月份信息的任务，检查task_id前缀（如"26_3_V2"中的"3"表示6月任务）
+                                task_id_prefix = meta.get('task_id', '').split('_')[1] if '_' in meta.get('task_id', '') else None
+                                if task_id_prefix:
+                                    # 项目26的任务前缀映射：1=4月, 2=5月, 3=6月, ...
+                                    # 前缀 = 月份 - 3
+                                    if result["project_id"] == 26:  # 特殊处理项目26
+                                        expected_prefix = str(report_month - 3)  # 如6月 → 前缀3
+                                        if task_id_prefix != expected_prefix:
+                                            logger.info(f"    [月份过滤-ID] 排除: {task_name} (前缀{task_id_prefix} ≠ 预期{expected_prefix})")
+                                            continue
+                        
                         candidates.append({
                             "task_id": meta.get('task_id', ''),
-                            "task_name": meta.get('task_name', doc),
+                            "task_name": task_name,
                             "similarity": similarity
                         })
                 
@@ -502,7 +543,7 @@ async def parse_daily(request: ParseRequest):
         seen_ids = set()
         
         for entry in entries:
-            match_result = match_project_and_task(entry.get("project_hint", ""), entry.get("content", ""))
+            match_result = match_project_and_task(entry.get("project_hint", ""), entry.get("content", ""), request.report_date)
             final_entries.append({
                 "content": entry.get("content", ""),
                 "matched_project_id": match_result["project_id"],
@@ -534,9 +575,76 @@ async def parse_daily(request: ParseRequest):
 
 @app.post("/api/parse_daily_fast", response_model=ParseResponse)
 async def parse_daily_fast(request: ParseRequest):
-    """7B模型快速解析 + 后端正则拆分"""
+    """7B模型快速解析 + 后端正则拆分（智能聚合）"""
     start_time = asyncio.get_event_loop().time()
     
+    # ===== 新增：智能聚合检测 =====
+    # 检查是否需要拆分（改进：避免误判描述性时间词）
+    # 时间段分隔符模式：句首或标点后的"上午/下午/晚上/加班"
+    time_period_pattern = r'(^|[，。；\n])(上午|下午|晚上|加班)[：:]\s*'
+    has_time_periods = bool(re.search(time_period_pattern, request.text))
+    
+    has_numbered_items = bool(re.search(r'\d\.', request.text))
+    has_multiple_projects = sum(1 for alias in PROJECT_ALIAS_MAP.keys() if alias in request.text) > 1
+    
+    # 如果没有时间段分隔符、序号、多项目，则不拆分，直接解析为一条
+    if not has_time_periods and not has_numbered_items and not has_multiple_projects:
+        logger.info(f"[智能聚合] 检测到单一工作内容，不拆分")
+        
+        # 让AI提取项目关键词并润色内容
+        prompt = f"""从以下工作描述中提取：
+1. 项目名称关键词（如"田阳铝厂阳极组装"）
+2. 核心工作内容摘要（简洁明了，不超过50字）
+
+工作描述：{request.text}
+
+返回JSON格式：
+{{"project_hint": "项目关键词", "content_summary": "核心工作摘要"}}
+"""
+        response = await call_ollama(prompt, "qwen2.5:7b")
+        
+        try:
+            result = json.loads(response)
+            project_hint = result.get("project_hint", "")
+            content_summary = result.get("content_summary", request.text)
+        except:
+            project_hint = request.text[:20]
+            content_summary = request.text
+        
+        # 匹配项目和任务（传入report_date用于月份过滤）
+        match_result = match_project_and_task(project_hint, content_summary, request.report_date)
+        
+        final_entries = [{
+            "content": content_summary if len(content_summary) < len(request.text) else request.text,
+            "matched_project_id": match_result["project_id"],
+            "matched_project_name": match_result["project_name"],
+            "matched_task_id": match_result["task_id"],
+            "matched_task_name": match_result["task_name"],
+            "start_time": "08:15",
+            "end_time": "18:00",
+            "hours": 8.0,
+            "confidence": match_result["confidence"]
+        }]
+        
+        matched_projects = []
+        if match_result["project_id"]:
+            matched_projects.append({
+                "id": match_result["project_id"],
+                "name": match_result["project_name"],
+                "leader": all_projects.get(match_result["project_id"], {}).get('leader', '')
+            })
+        
+        duration = int((asyncio.get_event_loop().time() - start_time) * 1000)
+        return ParseResponse(
+            success=True, 
+            entries=[ParsedEntry(**e) for e in final_entries], 
+            matched_projects=matched_projects, 
+            duration_ms=duration, 
+            model_used="qwen2.5:7b", 
+            match_method="smart_aggregate"
+        )
+    
+    # ===== 原有拆分逻辑（多时间段/多项目场景）=====
     # 1. 后端正则拆分时间段和序号
     periods = parse_time_periods(request.text)
     
@@ -613,7 +721,7 @@ async def parse_daily_fast(request: ParseRequest):
         if period.get("period") == "加班":
             # 先尝试匹配加班内容中的项目
             overtime_content = entry.get("content", "")
-            overtime_match = match_project_and_task(entry.get("project_hint", ""), overtime_content)
+            overtime_match = match_project_and_task(entry.get("project_hint", ""), overtime_content, request.report_date)
             
             # 检查加班内容是否属于"其他事项"
             other_keywords = ["临时", "领导交办", "其他", "杂事", "日常", "非项目"]
@@ -665,7 +773,7 @@ async def parse_daily_fast(request: ParseRequest):
                 method = "overtime_unmatched"
                 conf = 0.0
         else:
-            match_result = match_project_and_task(entry.get("project_hint", ""), entry.get("content", ""))
+            match_result = match_project_and_task(entry.get("project_hint", ""), entry.get("content", ""), request.report_date)
             pid = match_result["project_id"]
             pname = match_result["project_name"]
             task_id = match_result["task_id"]
