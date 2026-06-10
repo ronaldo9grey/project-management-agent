@@ -25,7 +25,7 @@ def generate_insight(period: str) -> bool:
     print(f"[{datetime.now()}] 开始生成AI洞察，时段: {period}")
     
     try:
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=200.0) as client:  # 增加超时到200秒
             response = client.post(url, headers={"Authorization": f"Bearer {token}"})
         
         if response.status_code == 200:

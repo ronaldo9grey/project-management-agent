@@ -576,7 +576,7 @@ async def parse_daily(request: ParseRequest):
 @app.post("/api/parse_daily_fast", response_model=ParseResponse)
 async def parse_daily_fast(request: ParseRequest):
     """7B模型快速解析 + 后端正则拆分（智能聚合）"""
-    start_time = asyncio.get_event_loop().time()
+    request_start_time = asyncio.get_event_loop().time()  # 改名避免冲突
     
     # ===== 新增：智能聚合检测 =====
     # 检查是否需要拆分（改进：避免误判描述性时间词）
@@ -590,6 +590,33 @@ async def parse_daily_fast(request: ParseRequest):
     # 如果没有时间段分隔符、序号、多项目，则不拆分，直接解析为一条
     if not has_time_periods and not has_numbered_items and not has_multiple_projects:
         logger.info(f"[智能聚合] 检测到单一工作内容，不拆分")
+        
+        # ⚠️ 新增：提取时间段（优先使用用户输入的时间）
+        work_start_time = "08:15"
+        work_end_time = "18:00"
+        work_hours = 8.0
+        
+        # 从输入文本提取时间段
+        time_match = re.search(r'(\d{1,2}:\d{2})\s*[—–\-至到]\s*(\d{1,2}:\d{2})', request.text)
+        if time_match:
+            work_start_time = time_match.group(1)
+            work_end_time = time_match.group(2)
+            # 计算工时（扣除午休）
+            try:
+                from datetime import datetime, timedelta
+                start_dt = datetime.strptime(work_start_time, "%H:%M")
+                end_dt = datetime.strptime(work_end_time, "%H:%M")
+                duration_minutes = (end_dt - start_dt).total_seconds() / 60
+                
+                # 扣除午休（12:00-13:45，105分钟）
+                if start_dt.hour < 12 and end_dt.hour > 13 or (end_dt.hour == 13 and end_dt.minute >= 45):
+                    duration_minutes -= 105
+                
+                work_hours = round(duration_minutes / 60, 2)
+                work_hours = max(0, min(work_hours, 8))  # 上限8小时，下限0
+                logger.info(f"[时间段提取] {work_start_time}-{work_end_time}, 工时: {work_hours}小时")
+            except Exception as e:
+                logger.warning(f"[时间段计算失败] {e}")
         
         # 让AI提取项目关键词并润色内容
         prompt = f"""从以下工作描述中提取：
@@ -620,9 +647,9 @@ async def parse_daily_fast(request: ParseRequest):
             "matched_project_name": match_result["project_name"],
             "matched_task_id": match_result["task_id"],
             "matched_task_name": match_result["task_name"],
-            "start_time": "08:15",
-            "end_time": "18:00",
-            "hours": 8.0,
+            "start_time": work_start_time,
+            "end_time": work_end_time,
+            "hours": work_hours,
             "confidence": match_result["confidence"]
         }]
         
@@ -634,7 +661,7 @@ async def parse_daily_fast(request: ParseRequest):
                 "leader": all_projects.get(match_result["project_id"], {}).get('leader', '')
             })
         
-        duration = int((asyncio.get_event_loop().time() - start_time) * 1000)
+        duration = int((asyncio.get_event_loop().time() - request_start_time) * 1000)
         return ParseResponse(
             success=True, 
             entries=[ParsedEntry(**e) for e in final_entries], 
