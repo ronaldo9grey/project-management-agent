@@ -55,6 +55,7 @@ export default function DailyPage() {
   // 📌 所有状态变量
   const [inputText, setInputText] = useState('')
   const [isParsing, setIsParsing] = useState(false)
+  const [parseMethod, setParseMethod] = useState<'cloud' | 'local' | null>(null)  // 当前解析方式
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [historyReports, setHistoryReports] = useState<HistoryReport[]>([])
@@ -266,10 +267,13 @@ export default function DailyPage() {
     }
   }
 
+  // handleParse - 云端解析函数，暂时注释
+  /*
   const handleParse = async () => {
     if (!inputText.trim()) return
     
     setIsParsing(true)
+    setParseMethod('cloud')
     setParseWarnings([])
     setMatchedProjects([])
     
@@ -326,6 +330,73 @@ export default function DailyPage() {
       // 解析失败，保留输入内容
     } finally {
       setIsParsing(false)
+      setParseMethod(null)
+    }
+  }
+  */
+
+  // 📌 本地解析（使用本地Ollama）
+  const handleLocalParse = async () => {
+    if (!inputText.trim()) return
+    
+    setIsParsing(true)
+    setParseMethod('local')
+    setParseWarnings([])
+    setMatchedProjects([])
+    
+    const startTime = Date.now()  // 记录开始时间
+    
+    try {
+      const result = await dailyApi.localParse(inputText, selectedDate)
+      
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1)  // 计算耗时（秒）
+      
+      // 显示警告信息
+      if (result.warnings && result.warnings.length > 0) {
+        setParseWarnings(result.warnings.map(w => ({
+          type: 'warning' as const,
+          message: w
+        })))
+      }
+      
+      // 记录匹配的项目
+      if (result.matched_projects && result.matched_projects.length > 0) {
+        setMatchedProjects(result.matched_projects)
+      }
+      
+      // 添加解析结果
+      if (result.entries && result.entries.length > 0) {
+        // 清空之前的记录（支持多次输入覆盖）
+        clearDailyEntries()
+        
+        result.entries.forEach((entry: ParsedEntry) => {
+          addDailyEntry(entry)
+        })
+        
+        // 标记已解析
+        setHasParsed(true)
+        
+        // 显示成功提示（包含耗时）
+        setParseWarnings([{
+          type: 'info' as const,
+          message: `✅ 本地解析成功！已解析 ${result.entries.length} 条工作记录${result.matched_projects?.length > 0 ? '，项目已匹配' : ''}，耗时 ${elapsed} 秒`
+        }])
+      } else {
+        setParseWarnings([
+          { type: 'error' as const, message: '⚠️ 未识别到有效的工作事项，请检查输入格式' },
+          { type: 'info' as const, message: '💡 提示：请描述具体的工作内容和时间，例如"xxx项目：上午完成方案编制4小时"' }
+        ])
+      }
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.detail || '本地解析失败，请重试'
+      setParseWarnings([
+        { type: 'error' as const, message: `❌ ${errorMsg}` },
+        { type: 'info' as const, message: '💡 请检查本地Ollama服务是否正常运行' }
+      ])
+      console.error(error)
+    } finally {
+      setIsParsing(false)
+      setParseMethod(null)
     }
   }
 
@@ -787,40 +858,84 @@ export default function DailyPage() {
                     <span className="text-gray-400">在上方输入工作内容...</span>
                   )}
                 </span>
-                <button
-                  onClick={handleParse}
-                  disabled={!inputText.trim() || isParsing}
-                  className="btn btn-primary"
-                  style={{
-                    position: 'relative',
-                    overflow: 'hidden'
-                  }}
-                >
-                  {isParsing ? (
-                    <span className="loading" style={{position: 'relative', zIndex: 1}}>
-                      <span className="spinner"></span>
-                      解析中...
-                    </span>
-                  ) : (
-                    <>
-                      <span>✨</span>
-                      智能解析
-                    </>
-                  )}
+                  {/* 解析按钮组 */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                  {/* 云端解析（DeepSeek） - 暂时注释，观察本地解析效果 */}
+                  {/*
+                  <button
+                    onClick={handleParse}
+                    disabled={!inputText.trim() || isParsing}
+                    className="btn btn-primary"
+                    style={{
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {isParsing && parseMethod === 'cloud' ? (
+                      <span className="loading" style={{position: 'relative', zIndex: 1}}>
+                        <span className="spinner"></span>
+                        云端解析...
+                      </span>
+                    ) : (
+                      <>
+                        <span>☁️</span>
+                        云端解析
+                      </>
+                    )}
+                    
+                    {isParsing && parseMethod === 'cloud' && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                        animation: 'shimmer 1.5s infinite'
+                      }} />
+                    )}
+                  </button>
+                  */}
                   
-                  {/* 解析动画背景 */}
-                  {isParsing && (
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
-                      animation: 'shimmer 1.5s infinite'
-                    }} />
-                  )}
-                </button>
+                  {/* 本地解析（Ollama） */}
+                  <button
+                    onClick={handleLocalParse}
+                    disabled={!inputText.trim() || isParsing}
+                    className="btn"
+                    title="🚀 调用本地部署 qwen 模型，速度快、隐私安全！让我们一起体验AI的力量～"
+                    style={{
+                      position: 'relative',
+                      overflow: 'hidden',
+                      background: isParsing && parseMethod === 'local' ? '#10b981' : '#059669',
+                      color: 'white',
+                      border: 'none'
+                    }}
+                  >
+                    {isParsing && parseMethod === 'local' ? (
+                      <span className="loading" style={{position: 'relative', zIndex: 1}}>
+                        <span className="spinner"></span>
+                        本地解析...
+                      </span>
+                    ) : (
+                      <>
+                        <span>🏠</span>
+                        本地解析
+                      </>
+                    )}
+                    
+                    {isParsing && parseMethod === 'local' && (
+                      <div style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)',
+                        animation: 'shimmer 1.5s infinite'
+                      }} />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

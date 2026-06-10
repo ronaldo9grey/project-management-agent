@@ -51,3 +51,6 @@ Thumbs.db
 # 测试数据
 test_*.json
 *.xlsx
+
+# 敏感文件
+scripts/.admin_token

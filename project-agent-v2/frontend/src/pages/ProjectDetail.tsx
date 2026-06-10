@@ -3,6 +3,7 @@ import { redirectToLogin } from '../utils/auth'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store'
 import { projectApi, apiClient } from '../api'
+import MobileNav from '../components/MobileNav'
 // ProjectTaskList 不再使用，树形组件已替代
 // import ProjectTaskList from '../components/ProjectTaskList'
 import CostImportModal from '../components/CostImportModal'
@@ -140,8 +141,8 @@ function TaskTreeNode({ task, level, expandedPhases, setExpandedPhases, expanded
     }
   }
   
-  // 第一层（大阶段）样式 - 仅当有子任务时使用阶段样式
-  if (isPhaseLevel && hasChildren) {
+  // 第一层（大阶段）样式 - 无论是否有子任务都使用阶段样式
+  if (isPhaseLevel) {
     return (
       <div className="task-phase">
         <div className="task-phase-header" onClick={toggleExpand} style={{ cursor: 'pointer' }}>
@@ -1093,24 +1094,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* 移动端底部导航 */}
-      <nav className="mobile-nav">
-        <Link to="/" className="mobile-nav-item">
-          <span className="mobile-nav-icon">🏠</span>
-          <span>首页</span>
-        </Link>
-        <Link to="/daily" className="mobile-nav-item">
-          <span className="mobile-nav-icon">📝</span>
-          <span>日报</span>
-        </Link>
-        <Link to="/projects" className="mobile-nav-item active">
-          <span className="mobile-nav-icon">📊</span>
-          <span>项目</span>
-        </Link>
-        <Link to="/plans" className="mobile-nav-item">
-          <span className="mobile-nav-icon">📁</span>
-          <span>计划</span>
-        </Link>
-      </nav>
+      <MobileNav active="projects" />
     </div>
   )
 }

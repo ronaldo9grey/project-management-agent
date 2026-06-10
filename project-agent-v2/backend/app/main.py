@@ -1,7 +1,7 @@
 # 项目管理智能体 - 后端服务
 # FastAPI + LangChain/LangGraph + DeepSeek
 
-from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Depends
+from fastapi import FastAPI, Request, HTTPException, UploadFile, File, Depends, Form, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -1361,6 +1361,188 @@ async def smart_parse_daily(
         except:
             pass
         raise HTTPException(status_code=500, detail=f"解析失败: {str(e)}")
+
+
+@app.post("/agent/api/agent/daily/local-parse")
+async def local_parse_daily(
+    request: SmartParseRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    本地解析日报文本 - 使用本地Ollama 7B模型（快速响应）
+    
+    特点：
+    - 模型：qwen2.5:7B（端口8001）
+    - 响应速度：首次加载约50秒，常驻后约1-2秒
+    - 无向量检索，直接LLM生成
+    - 适合快速响应场景
+    
+    返回：
+    - matched_projects: 匹配到的项目列表
+    - unmatched_projects: 未匹配的项目名称
+    - entries: 解析出的工作事项
+    - warnings: 警告信息
+    """
+    try:
+        from .task_auto import parse_daily_with_7b
+        from datetime import datetime
+
+        user_id = current_user.get("employee_id", current_user.get("username"))
+        username = current_user.get("name", current_user.get("username"))
+        
+        logger.info(f"用户 {current_user.get('username')} 开始本地7B解析日报: {request.text[:50]}...")
+        
+        start_time = datetime.now()
+
+        # 获取项目列表（用于匹配）
+        projects = []
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT id, name, leader FROM projects
+                WHERE status = '进行中' AND is_deleted = false
+                ORDER BY id
+                LIMIT 50
+            """))
+            projects = [
+                {"id": row[0], "name": row[1], "leader": row[2]}
+                for row in result.fetchall()
+            ]
+
+        # 调用7B模型解析
+        try:
+            result = await parse_daily_with_7b(request.text, request.report_date, projects)
+        except httpx.ConnectError:
+            logger.error("本地Ollama连接失败")
+            raise HTTPException(status_code=503, detail="本地模型服务不可用，请检查Ollama是否运行")
+        except httpx.ReadTimeout:
+            logger.error("7B解析超时")
+            raise HTTPException(status_code=504, detail="7B解析超时，请稍后再试")
+        except Exception as e:
+            logger.error(f"7B解析异常: {e}")
+            raise HTTPException(status_code=500, detail=f"7B解析异常: {str(e)}")
+        
+        if not result.get("success"):
+            error_msg = result.get("error", "7B解析失败")
+            logger.error(f"7B解析失败: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+        
+        entries = result.get("entries", [])
+        matched_projects_list = result.get("matched_projects", [])
+        
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+        
+        logger.info(f"7B解析成功，耗时 {duration_ms}ms，条目数: {len(entries)}")
+
+        return {
+            "success": True,
+            "matched_projects": matched_projects_list,
+            "unmatched_projects": [],
+            "entries": entries,
+            "warnings": result.get("warnings", []),
+            "original_text": request.text,
+            "parse_method": "local-7b",
+            "duration_ms": duration_ms
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"本地解析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"本地解析失败: {str(e)}")
+
+
+@app.post("/agent/api/agent/daily/smart-parse-7b")
+async def parse_daily_with_7b(
+    request: SmartParseRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    本地解析日报文本 - 使用本地Ollama 7B模型（快速响应版）
+
+    特点：
+    - 模型：qwen2.5:7B（端口8001）
+    - 响应速度：首次加载约50秒，后续约1-2秒
+    - 无向量检索，直接LLM生成
+    - 适合快速响应场景
+
+    返回：
+    - matched_projects: 匹配到的项目列表
+    - unmatched_projects: 未匹配的项目名称
+    - entries: 解析出的工作事项
+    - warnings: 警告信息
+    """
+    try:
+        from .task_auto import parse_daily_with_7b
+        from datetime import datetime
+
+        user_id = current_user.get("employee_id", current_user.get("username"))
+        username = current_user.get("name", current_user.get("username"))
+
+        logger.info(f"用户 {current_user.get('username')} 开始7B模型解析日报: {request.text[:50]}...")
+
+        start_time = datetime.now()
+
+        # 获取项目列表（用于匹配）
+        projects = []
+        with get_connection() as conn:
+            result = conn.execute(text("""
+                SELECT id, name, leader FROM projects
+                WHERE status = '进行中' AND is_deleted = false
+                ORDER BY id
+                LIMIT 50
+            """))
+            projects = [
+                {"id": row[0], "name": row[1], "leader": row[2]}
+                for row in result.fetchall()
+            ]
+
+        # 调用7B模型解析
+        try:
+            result = await parse_daily_with_7b(request.text, request.report_date, projects)
+        except httpx.ConnectError:
+            logger.error("本地Ollama连接失败")
+            raise HTTPException(status_code=503, detail="本地模型服务不可用，请检查Ollama是否运行")
+        except httpx.ReadTimeout:
+            logger.error("7B解析超时")
+            raise HTTPException(status_code=504, detail="7B解析超时，请稍后再试")
+        except Exception as e:
+            logger.error(f"7B解析异常: {e}")
+            raise HTTPException(status_code=500, detail=f"7B解析异常: {str(e)}")
+
+        if not result.get("success"):
+            error_msg = result.get("error", "7B解析失败")
+            logger.error(f"7B解析失败: {error_msg}")
+            raise HTTPException(status_code=500, detail=error_msg)
+
+        entries = result.get("entries", [])
+        matched_projects_list = result.get("matched_projects", [])
+
+        end_time = datetime.now()
+        duration_ms = int((end_time - start_time).total_seconds() * 1000)
+
+        logger.info(f"7B解析成功，耗时 {duration_ms}ms，条目数: {len(entries)}")
+
+        return {
+            "success": True,
+            "matched_projects": matched_projects_list,
+            "unmatched_projects": [],
+            "entries": entries,
+            "warnings": result.get("warnings", []),
+            "original_text": request.text,
+            "parse_method": "local-7b",  # 标记解析方式
+            "duration_ms": duration_ms
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"7B解析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"7B解析失败: {str(e)}")
 
 
 class CreateReportRequest(BaseModel):
@@ -3370,6 +3552,116 @@ async def get_monthly_project_hours(
         }
 
 
+@app.get("/agent/api/agent/stats/person-project-analysis")
+async def get_person_project_analysis(
+    employee_name: str = None,
+    year: int = None,
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取人员项目投入分析（单人员维度）
+    
+    只统计正式项目（projects表中的项目），不含早会等基础工作
+    
+    参数:
+    - employee_name: 人员姓名（必填）
+    - year: 年份（默认当前年）
+    """
+    if not employee_name:
+        raise HTTPException(status_code=400, detail="请指定人员姓名")
+    
+    today = datetime.now().date()
+    year = year or today.year
+    year_start = datetime(year, 1, 1).date()
+    year_end = datetime(year, 12, 31).date()
+    
+    with get_connection() as conn:
+        # 1. 查询该人员在正式项目的工时（只统计projects表中的项目）
+        result = conn.execute(text("""
+            SELECT 
+                p.name as project_name,
+                SUM(dwi.hours_spent) as total_hours,
+                COUNT(DISTINCT dwi.report_id) as report_count
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dwi.report_id = dr.id
+            JOIN projects p ON dwi.project_id = p.id::text
+            WHERE dr.employee_name = :employee_name
+              AND dr.report_date >= :year_start
+              AND dr.report_date <= :year_end
+              AND dr.is_deleted = false
+              AND p.is_deleted = false
+            GROUP BY p.name
+            ORDER BY total_hours DESC
+        """), {
+            "employee_name": employee_name,
+            "year_start": year_start,
+            "year_end": year_end
+        })
+        
+        projects = []
+        total_hours = 0
+        for row in result:
+            project_hours = float(row[1] or 0)
+            projects.append({
+                "project_name": row[0],
+                "hours": round(project_hours, 1),
+                "report_count": row[2]
+            })
+            total_hours += project_hours
+        
+        # 2. 计算占比（基于正式项目总工时）
+        for p in projects:
+            p["percent"] = round(p["hours"] / total_hours * 100, 1) if total_hours > 0 else 0
+        
+        # 3. 查询月度工时趋势（只统计正式项目）
+        monthly_result = conn.execute(text("""
+            SELECT 
+                EXTRACT(MONTH FROM dr.report_date) as month,
+                SUM(dwi.hours_spent) as hours
+            FROM daily_work_items dwi
+            JOIN daily_reports dr ON dwi.report_id = dr.id
+            JOIN projects p ON dwi.project_id = p.id::text
+            WHERE dr.employee_name = :employee_name
+              AND dr.report_date >= :year_start
+              AND dr.report_date <= :year_end
+              AND dr.is_deleted = false
+              AND p.is_deleted = false
+            GROUP BY EXTRACT(MONTH FROM dr.report_date)
+            ORDER BY month
+        """), {
+            "employee_name": employee_name,
+            "year_start": year_start,
+            "year_end": year_end
+        })
+        
+        monthly_trend = []
+        for row in monthly_result:
+            monthly_trend.append({
+                "month": int(row[0]),
+                "hours": round(float(row[1] or 0), 1)
+            })
+        
+        # 4. 获取所有员工列表（用于下拉选择）
+        employees_result = conn.execute(text("""
+            SELECT DISTINCT employee_name
+            FROM daily_reports
+            WHERE is_deleted = false
+              AND LOWER(employee_name) != 'admin'
+            ORDER BY employee_name
+        """))
+        all_employees = [row[0] for row in employees_result]
+        
+        return {
+            "employee_name": employee_name,
+            "year": year,
+            "total_hours": round(total_hours, 1),
+            "project_count": len(projects),
+            "projects": projects,
+            "monthly_trend": monthly_trend,
+            "all_employees": all_employees
+        }
+
+
 @app.get("/agent/api/agent/stats/project-employee-details")
 async def get_project_employee_details(
     project_name: str,
@@ -5028,7 +5320,7 @@ async def get_project_tasks(
                      pt.status, pt.progress, pt.planned_hours,
                      pt.parent_task_id, pt.task_level, pt.actual_end_date,
                      pt."isNode", pt.leaf_node
-            ORDER BY pt.task_id
+            ORDER BY CAST(SUBSTRING(pt.task_id FROM 'T([0-9]+)$') AS INTEGER)
         """), {"pid": project_id, "max_version": max_version})
 
         tasks = []
@@ -5253,7 +5545,7 @@ async def upload_plan_excel(
                     COUNT(*) FILTER (WHERE progress = 0 OR progress IS NULL) as pending_tasks,
                     COALESCE(AVG(progress), 0) as avg_progress
                 FROM project_tasks
-                WHERE project_id = :pid AND is_latest = true AND is_deleted = false
+                WHERE project_id = CAST(:pid AS VARCHAR) AND is_latest = true AND is_deleted = false
             """), {"pid": project_id})
             status_row = status_result.fetchone()
             
@@ -8324,48 +8616,76 @@ async def get_ai_insight_api(
     current_user: Dict = Depends(get_current_user)
 ):
     """
-    获取 AI 洞察（按需生成）
+    获取 AI 洞察（读取缓存）
+    
+    洞察由定时任务在凌晨和中午各生成一次，前端直接读取缓存
     """
     try:
-        # text 已从 database 模块导入
-        from dotenv import load_dotenv
+        from .ai_insight_service import get_latest_insight_from_db
         from datetime import date
-
-        load_dotenv()
-        # 检查今日是否已生成
-        with get_connection() as conn:
-            existing = conn.execute(text("""
-                SELECT content FROM ai_insights
-                WHERE insight_date = :today
-                ORDER BY created_at DESC
-                LIMIT 1
-            """), {"today": date.today()}).fetchone()
-
-            if existing:
-                return {"content": existing[0], "cached": True}
-
-        # 生成新的洞察
-        insight = await generate_ai_insight()
-
-        # 保存洞察
-        with get_connection() as conn:
-            conn.execute(text("""
-                INSERT INTO ai_insights (insight_date, role, content)
-                VALUES (:today, :role, :content)
-            """), {
-                "today": date.today(),
-                "role": current_user.get("role", "user"),
-                "content": insight
-            })
-            conn.commit()
-
-        return {"content": insight, "cached": False}
+        
+        # 从数据库获取最新洞察
+        insight = get_latest_insight_from_db()
+        
+        if insight:
+            return {
+                "content": insight["content"],
+                "period": insight["period"],
+                "generated_at": insight["created_at"].isoformat() if insight["created_at"] else None,
+                "cached": True
+            }
+        
+        # 如果今天还没有洞察，返回提示
+        return {
+            "content": "今日洞察尚未生成，请稍后再试。",
+            "cached": False
+        }
 
     except Exception as e:
-        logger.error(f" {e}")
+        logger.error(f"获取AI洞察失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@app.post("/agent/api/agent/dashboard/insight/generate")
+async def generate_insight_api(
+    period: str = "morning",
+    current_user: Dict = Depends(require_role(["admin"]))
+):
+    """
+    手动触发洞察生成（定时任务调用）
+    
+    参数：
+    - period: "morning" 或 "noon"
+    
+    仅管理员可调用
+    
+    注意：此接口会阻塞约40秒（调用本地模型润色）
+    """
+    try:
+        from .ai_insight_service import generate_ai_insight_with_polish, save_insight_to_db
+        
+        # 生成洞察（同步执行，约40秒）
+        insight_data = await generate_ai_insight_with_polish(period)
+        
+        # 保存到数据库
+        record_id = save_insight_to_db(insight_data)
+        
+        logger.info(f"[定时任务] AI洞察生成完成，ID: {record_id}, 时段: {period}")
+        
+        return {
+            "success": True,
+            "id": record_id,
+            "period": period,
+            "content": insight_data["polished"],
+            "raw_content": insight_data["raw"],
+            "generated_at": insight_data["generated_at"]
+        }
+
+    except Exception as e:
+        logger.error(f"生成AI洞察失败: {e}")
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"生成失败: {str(e)}")
 
 
 async def generate_ai_insight() -> str:

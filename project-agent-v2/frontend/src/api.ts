@@ -220,6 +220,39 @@ export const dailyApi = {
     }
   },
   
+  // 本地解析（使用本地Ollama）
+  localParse: async (text: string, reportDate?: string) => {
+    const res = await apiClient.post('/api/agent/daily/local-parse', {
+      text,
+      report_date: reportDate
+    }, {
+      timeout: 120000  // 本地解析可能更慢，设置 120 秒超时
+    })
+    return res.data as {
+      entries: Array<{
+        start_time: string
+        end_time: string
+        content: string
+        project_hint?: string
+        hours: number
+        matched_project_id?: number
+        matched_project_name?: string
+        match_confidence: number
+      }>
+      matched_projects: Array<{
+        id: number
+        name: string
+        leader: string
+        confidence: number
+      }>
+      unmatched_projects: string[]
+      warnings: string[]
+      confidence: number
+      issues: string[]
+      parse_method: string
+    }
+  },
+  
   // 创建日报（新接口）
   createReport: async (data: {
     report_date: string

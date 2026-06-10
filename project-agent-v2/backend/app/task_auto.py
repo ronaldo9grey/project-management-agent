@@ -20,10 +20,12 @@ from functools import wraps
 try:
     from .database import get_engine, text
     from .logger import ai_logger
+    from .work_time_config import calculate_work_hours
 except ImportError:
     # 当直接导入时使用绝对导入
     from database import get_engine, text
     from logger import ai_logger
+    from work_time_config import calculate_work_hours
 
 import httpx
 
@@ -803,34 +805,210 @@ def get_all_projects_with_tasks() -> List[Dict]:
         return projects
 
 
+async def search_projects_by_vector(user_input: str, all_projects: list, top_k: int = 10) -> list:
+    """
+    向量检索：本地嵌入计算 + 远程ChromaDB查询
+    
+    改进：
+    - 嵌入计算：本地ONNX模型（毫秒级）
+    - ChromaDB查询：远程frpc穿透（秒级）
+    - 总耗时：约1秒（vs 之前36秒）
+    """
+    import os
+    import numpy as np
+    from transformers import AutoTokenizer
+    import onnxruntime as ort
+    import chromadb
+    
+    try:
+        # 1. 本地嵌入计算（ONNX模型）
+        os.environ['HF_HUB_OFFLINE'] = '1'
+        os.environ['TRANSFORMERS_OFFLINE'] = '1'
+        
+        model_path = '/home/ubuntu/.cache/chroma/onnx_models/all-MiniLM-L6-v2/onnx'
+        
+        ai_logger.info(f"[向量检索] 本地嵌入计算: {user_input[:30]}...")
+        
+        # 加载 tokenizer（首次加载会缓存）
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        
+        # 加载 ONNX 模型（单例模式，避免重复加载）
+        if not hasattr(search_projects_by_vector, '_onnx_session'):
+            search_projects_by_vector._onnx_session = ort.InferenceSession(
+                f"{model_path}/model.onnx"
+            )
+        session = search_projects_by_vector._onnx_session
+        
+        # Tokenize
+        inputs = tokenizer(
+            user_input,
+            return_tensors='pt',
+            padding=True,
+            truncation=True,
+            max_length=512
+        )
+        
+        # ONNX 推理
+        input_dict = {
+            'input_ids': inputs['input_ids'].numpy(),
+            'attention_mask': inputs['attention_mask'].numpy(),
+            'token_type_ids': inputs.get('token_type_ids', inputs['input_ids'] * 0).numpy()
+        }
+        
+        outputs = session.run(None, input_dict)
+        embedding = outputs[0].mean(axis=1)[0].tolist()  # 平均池化
+        
+        ai_logger.info(f"[向量检索] 嵌入维度: {len(embedding)}")
+        
+        # 2. 查询远程ChromaDB（frpc穿透）
+        chromadb_client = chromadb.HttpClient(host="127.0.0.1", port=8002)
+        collection = chromadb_client.get_collection("projects")
+        
+        results = collection.query(
+            query_embeddings=[embedding],
+            n_results=top_k
+        )
+        
+        # 3. 解析结果
+        candidates = []
+        for meta, dist in zip(
+            results['metadatas'][0],
+            results['distances'][0]
+        ):
+            # 从all_projects查找完整信息
+            project_info = None
+            for p in all_projects:
+                if p['id'] == meta['project_id']:
+                    project_info = p.copy()
+                    project_info['similarity'] = max(0, 1 - dist)
+                    break
+            
+            if project_info:
+                candidates.append(project_info)
+            else:
+                # 如果找不到完整信息，构造一个基本结构
+                candidates.append({
+                    "id": meta['project_id'],
+                    "name": meta['project_name'],
+                    "tasks": []  # 必须有tasks字段
+                })
+        
+        ai_logger.info(f"[向量检索] 找到 {len(candidates)} 个候选项目")
+        
+        return candidates
+        
+    except Exception as e:
+        ai_logger.error(f"[向量检索] 异常: {e}")
+        return []
+
+
+def filter_projects_hybrid(user_input: str, projects: list, vector_candidates: list = None) -> list:
+    """
+    混合检索：向量检索 + 关键词过滤
+    
+    策略：
+    1. 如果有向量候选，进行关键词精确过滤
+    2. 如果无向量候选，回退到纯关键词匹配
+    """
+    # 提取地名关键词
+    location_keywords = []
+    locations = ["隆林", "田林", "田阳", "靖锰", "百矿", "德保", "平果", "华磊"]
+    for loc in locations:
+        if loc in user_input:
+            location_keywords.append(loc)
+    
+    # 如果有向量候选，进行关键词过滤
+    if vector_candidates:
+        if location_keywords:
+            # 地名精确过滤
+            filtered = []
+            for candidate in vector_candidates:
+                name = candidate.get('name', '')
+                for loc in location_keywords:
+                    if loc in name:
+                        filtered.append(candidate)
+                        break
+            
+            if filtered:
+                ai_logger.info(f"[混合检索] 地名过滤后: {len(filtered)} 个项目")
+                return filtered[:12]
+        
+        # 无地名关键词，返回向量检索结果
+        ai_logger.info(f"[混合检索] 使用向量检索结果: {len(vector_candidates)} 个项目")
+        return vector_candidates[:12]
+    
+    # 向量检索失败，回退到关键词匹配
+    ai_logger.info(f"[混合检索] 向量检索失败，回退关键词匹配")
+    return filter_projects_by_keywords(user_input, projects)
+
+
 def filter_projects_by_keywords(user_input: str, projects: list) -> list:
     """
-    简单关键词匹配，筛选相关项目
+    智能关键词匹配，筛选相关项目
+    
+    改进点：
+    1. 动态提取项目名关键词（不依赖硬编码）
+    2. 模糊匹配（支持简称）
+    3. 语义相似度（简单的词频匹配）
     """
-    # 提取关键词
-    keywords = []
-    for kw in ["隆林", "田林", "靖锰", "百矿", "矿机", "氧化铝输送", "净化", "除尘", 
-               "风机", "电动阀", "PLC", "配电", "电缆", "余热发电", "碳素", 
-               "空压机", "整流", "阳极组装", "自动化", "输送", "调试"]:
-        if kw in user_input:
-            keywords.append(kw)
+    import re
     
-    if not keywords:
-        return projects  # 无关键词，返回全部
+    # 1. 提取用户输入中的项目名关键词
+    # 常见的项目名关键词模式
+    user_keywords = set()
     
-    # 简单匹配：项目名包含任一关键词
-    matched = []
+    # 从用户输入中提取可能的地点/项目名
+    location_patterns = ["隆林", "田林", "田阳", "靖锰", "百矿", "德保", "平果", "华磊"]
+    for loc in location_patterns:
+        if loc in user_input:
+            user_keywords.add(loc)
+    
+    # 从项目名中提取动态关键词（去掉常见词）
+    project_keywords = set()
+    common_words = {"项目", "工程", "系统", "改造", "建设", "安装", "调试", "改造项目", "建设工程"}
+    
     for p in projects:
-        for kw in keywords:
-            if kw in p["name"]:
+        name = p["name"]
+        # 提取项目名中的关键词（去掉常见词）
+        words = re.findall(r'[\u4e00-\u9fa5]{2,}', name)  # 提取2字以上中文词
+        for word in words:
+            if word not in common_words and len(word) >= 2:
+                project_keywords.add(word)
+    
+    # 2. 匹配逻辑
+    matched = []
+    
+    # 先尝试精确匹配项目名
+    for p in projects:
+        name = p["name"]
+        # 项目名中包含用户输入的关键词
+        for kw in user_keywords:
+            if kw in name:
                 matched.append(p)
                 break
     
-    if matched:
-        ai_logger.info(f"关键词筛选：{len(projects)}→{len(matched)}个 (关键词: {keywords})")
-        return matched[:12]  # 最多12个
+    # 如果精确匹配结果太少，尝试模糊匹配
+    if len(matched) < 3:
+        # 提取用户输入中的所有可能的中文词组
+        user_words = set(re.findall(r'[\u4e00-\u9fa5]{2,}', user_input))
+        
+        for p in projects:
+            if p in matched:
+                continue
+            name = p["name"]
+            # 项目名包含用户输入的任一词组
+            for word in user_words:
+                if word in name and len(word) >= 2:
+                    matched.append(p)
+                    break
     
-    return projects
+    # 3. 如果仍然没有匹配，返回全部项目（不限制，保证识别度）
+    if not matched:
+        ai_logger.info(f"[预筛选] 未匹配关键词，返回全部项目")
+        return projects  # 返回全部，由LLM处理
+    
+    ai_logger.info(f"[预筛选] {len(projects)}个项目 → 筛选出{len(matched)}个")
+    return matched[:12]  # 匹配成功时限制12个
 
 
 async def parse_daily_all_in_one(
@@ -1265,3 +1443,244 @@ def correct_hours_precision(entries: List[Dict]) -> List[Dict]:
                 entry["time"]["period_total_hours"] = standard_hours
     
     return entries
+
+
+# ========== 本地Ollama解析函数 ==========
+
+async def parse_daily_all_in_one_local(
+    user_input: str,
+    report_date: str = None,
+    employee_id: str = "",
+    employee_name: str = ""
+) -> Dict:
+    """
+    调用远程AI服务器完整API（一站式解析）- 使用35B模型
+    
+    改进：
+    - 向量检索：远程本地计算（毫秒级）
+    - LLM生成：远程本地计算（30-60秒）
+    - 总耗时：约30-60秒（vs 之前超时）
+    
+    返回：
+    - success: 是否成功
+    - entries: 解析条目列表
+    - matched_projects: 匹配的项目列表
+    """
+    import httpx
+    
+    try:
+        # 调用远程完整API（35B模型）
+        parser_url = "http://127.0.0.1:8003/api/parse_daily"
+        
+        ai_logger.info(f"[远程解析-35B] 调用远程API: {user_input[:30]}...")
+        
+        # 设置超时120秒（远程API包含LLM生成，可能需要更长时间）
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                parser_url,
+                json={
+                    "text": user_input,
+                    "report_date": report_date,
+                    "employee_id": employee_id,
+                    "employee_name": employee_name
+                }
+            )
+        
+        if response.status_code != 200:
+            ai_logger.error(f"[远程解析-35B] API调用失败: {response.status_code}")
+            return {
+                "success": False,
+                "error": f"API调用失败: {response.status_code}",
+                "entries": [],
+                "matched_projects": []
+            }
+        
+        result = response.json()
+        
+        ai_logger.info(f"[远程解析-35B] 成功，耗时: {result.get('duration_ms', 0)}ms，条目数: {len(result.get('entries', []))}")
+        
+        # 返回结果（转换为标准格式）
+        return {
+            "success": result.get("success", False),
+            "entries": result.get("entries", []),
+            "matched_projects": result.get("matched_projects", [])
+        }
+        
+    except httpx.TimeoutException:
+        ai_logger.error(f"[远程解析-35B] 超时")
+        return {
+            "success": False,
+            "error": "远程解析超时",
+            "entries": [],
+            "matched_projects": []
+        }
+    except Exception as e:
+        ai_logger.error(f"[远程解析-35B] 异常: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "entries": [],
+            "matched_projects": []
+        }
+
+
+# 项目别名映射表（用于项目匹配）
+PROJECT_ALIAS_MAP = {
+    "炭渣项目": 32,
+    "炭渣试验": 32,
+    "田阳铝厂电解质炭渣处理": 32,
+    "锰渣无害化": 33,
+    "锰渣专题": 33,
+    "锰锭试制": 34,
+    "锰锭": 34,
+    "落地锰": 34,
+    "落地锰转化锰锭": 34,
+    "德保铝厂化锰筑炉": 34,
+    "铁锭模": 34,
+    "德保铝厂化锰铸锰锭": 34,
+    "锰锭项目": 34,
+    "田林铝厂供电整流": 19,
+    "隆林铝厂除尘器": 18,
+    "隆林铝厂空压机": 20,
+    "田林铝厂空压机": 23,
+    "德保铝厂空压机": 22,
+    "田阳铝厂空压机": 21,
+    "电解槽新烟管": 12,
+    "新烟管": 12,
+    "新烟管软连接": 12,
+    "烟管软连接": 12,
+    "600KA槽烟气": 12,
+    "槽上部烟气": 12,
+    "电解铝多功能天车抓斗": 14,
+    "田林电解天车抓斗": 14,
+    "天车抓斗改进": 14,
+    "抓斗产业化": 14,
+    "隆林铝厂整流系统": 24,
+    "锰渣固化": 33,
+}
+
+# 任务关键词映射表（用于任务匹配）
+TASK_KEYWORDS_MAP = {
+    "图纸设计": ["设计", "CAD", "图纸", "绘图", "方案设计", "系统设计"],
+    "图纸审查": ["审查", "审核", "图纸审查", "预算审查"],
+    "招标": ["招标", "投标", "采购", "合同", "招标公告", "开标", "评标"],
+    "技术任务书": ["技术任务书", "技术规格", "任务书"],
+    "中标": ["中标", "中标通知"],
+    "现场调试": ["调试", "现场", "安装调试", "联调"],
+    "需求分析": ["需求", "调研", "需求分析", "需求调研"],
+    "方案评审": ["评审", "方案评审", "评审会"],
+    "技术交流": ["交流", "讨论", "会议", "技术交流"],
+    "文档编制": ["文档", "编写", "编制", "说明书", "报告"],
+}
+
+
+async def parse_daily_with_7b(
+    user_input: str,
+    report_date: str = None,
+    projects: List[Dict] = None
+) -> Dict:
+    """
+    使用远程日报解析API（7B模型快速解析 + 后端正则拆分）
+    
+    特点：
+    - 模型：qwen2.5:7b（端口8003）
+    - 三级匹配：别名映射 → 精确匹配 → RAG匹配
+    - 耗时：约1-4秒
+    - 后端正则拆分序号、时间段识别
+    
+    返回：
+    - success: 是否成功
+    - entries: 解析条目列表
+    - matched_projects: 匹配的项目列表
+    """
+    import httpx
+    
+    try:
+        # 调用远程日报解析API（端口8003，7B快速解析）
+        parser_url = "http://127.0.0.1:8003/api/parse_daily_fast"
+        
+        ai_logger.info(f"[7B快速解析] 开始解析: {user_input[:30]}...")
+        
+        # 设置超时30秒（7B模型推理较快）
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                parser_url,
+                json={
+                    "text": user_input,
+                    "report_date": report_date,
+                    "employee_id": "",
+                    "employee_name": "",
+                    "model": "qwen2.5:7b"
+                }
+            )
+        
+        if response.status_code != 200:
+            ai_logger.error(f"[7B快速解析] API调用失败: {response.status_code}")
+            return {
+                "success": False,
+                "error": f"Parser API失败: {response.status_code}",
+                "entries": [],
+                "matched_projects": []
+            }
+        
+        result = response.json()
+        
+        # parser_api已经返回完整格式
+        entries = result.get("entries", [])
+        matched_projects = result.get("matched_projects", [])
+        
+        ai_logger.info(f"[7B快速解析] 成功，条目数: {len(entries)}，匹配项目: {len(matched_projects)}")
+        
+        return {
+            "success": True,
+            "entries": entries,
+            "matched_projects": matched_projects
+        }
+        
+    except httpx.TimeoutException:
+        ai_logger.error(f"[7B快速解析] 超时")
+        return {
+            "success": False,
+            "error": "14B模型解析超时",
+            "entries": [],
+            "matched_projects": []
+        }
+    except Exception as e:
+        ai_logger.error(f"[7B快速解析] 异常: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "entries": [],
+            "matched_projects": []
+        }
+
+
+def parse_daily_all_in_one_local_sync(user_input: str, report_date: str = None) -> Dict:
+    """同步版本（用于线程池）"""
+    import asyncio
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(parse_daily_all_in_one_local(user_input, report_date))
+        loop.close()
+        return result
+    except Exception as e:
+        ai_logger.error(f"[本地解析-同步] 异常: {e}")
+        return {
+            "success": False,
+            "entries": [],
+            "warnings": [f"本地解析异常: {str(e)}"]
+        }
+
+
+async def parse_daily_all_in_one_local_threaded(user_input: str, report_date: str = None) -> Dict:
+    """在线程池中执行本地解析"""
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        result = await loop.run_in_executor(
+            executor,
+            parse_daily_all_in_one_local_sync,
+            user_input,
+            report_date
+        )
+    return result

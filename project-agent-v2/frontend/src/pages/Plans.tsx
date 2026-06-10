@@ -216,34 +216,6 @@ export default function PlansPage() {
     }
   }
 
-  // Excel预览功能（已移除，改为直接下载）
-  const handlePreviewExcel = async (version: any) => {
-    if (!version.file_name) {
-      alert('该版本没有关联的Excel文件')
-      return
-    }
-    
-    // 直接下载文件
-    try {
-      const res = await fetch(`/agent/api/agent/plans/file/${version.id}`, {
-        headers: { 'Authorization': `Bearer ${useAppStore.getState().token}` }
-      })
-      if (!res.ok) throw new Error('文件不存在')
-      
-      const blob = await res.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = version.file_name
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      window.URL.revokeObjectURL(url)
-    } catch (e: any) {
-      alert(`下载失败: ${e.message}`)
-    }
-  }
-
   const handleLogout = () => {
     logout()
     redirectToLogin()
@@ -408,17 +380,6 @@ export default function PlansPage() {
                                 <span className="font-medium text-gray-900">{v.version_name}</span>
                                 {v.is_current && (
                                   <span className="tag tag-success">当前版本</span>
-                                )}
-                                {v.file_name && (
-                                  <>
-                                    <span className="hidden sm:inline">•</span>
-                                    <span 
-                                      className="text-blue-600 hover:text-blue-800 cursor-pointer text-sm underline"
-                                      onClick={() => handlePreviewExcel(v)}
-                                    >
-                                      {v.file_name}
-                                    </span>
-                                  </>
                                 )}
                               </div>
                             </div>
