@@ -1248,6 +1248,10 @@ async def parse_daily_all_in_one_threaded(user_input: str, report_date: str = No
 def validate_ai_result(ai_result: Dict, projects: List[Dict]) -> Dict:
     """
     验证并修复 AI 返回结果
+    
+    增强逻辑：
+    - 任务匹配二次验证（关键词匹配）
+    - 当AI返回的任务匹配置信度较低时，用关键词匹配纠正
     """
     valid_project_ids = {p["id"] for p in projects}
     project_tasks = {p["id"]: {t["task_id"] for t in p["tasks"]} for p in projects}
@@ -1280,13 +1284,30 @@ def validate_ai_result(ai_result: Dict, projects: List[Dict]) -> Dict:
                 # 修正项目名称
                 project["name"] = project_names.get(pid, project.get("name"))
         
-        # 校验任务
+        # 校验任务（增强：关键词匹配二次验证）
         if task and project:
             tid = task.get("id")
             pid = project.get("id")
             if tid not in project_tasks.get(pid, set()):
                 warnings.append(f"第{idx+1}条: 任务 {tid} 不属于项目 {project.get('name')}")
                 task = None
+            else:
+                # ⚠️ 关键词匹配二次验证
+                # 当置信度 < 0.9 时，用关键词匹配检查是否更合理的任务
+                if confidence < 0.9:
+                    better_task = verify_task_with_keywords(content, task, projects, pid)
+                    if better_task and better_task["task_id"] != tid:
+                        # 发现更匹配的任务，纠正
+                        ai_logger.info(f"[任务匹配纠正] '{content[:30]}' : {task.get('name')} → {better_task['task_name']} (关键词匹配)")
+                        task = {"id": better_task["task_id"], "name": better_task["task_name"]}
+                        warnings.append(f"第{idx+1}条: 任务匹配已纠正为 {better_task['task_name']}")
+        elif project and not task:
+            # AI未匹配任务，尝试关键词匹配
+            pid = project.get("id")
+            matched_task = match_task_by_keywords(content, projects, pid)
+            if matched_task:
+                task = {"id": matched_task["task_id"], "name": matched_task["task_name"]}
+                ai_logger.info(f"[任务匹配补充] '{content[:30]}' → {matched_task['task_name']} (关键词匹配)")
         
         # 校验工时（此时已校正过，只检查单项合理性）
         if time_info:
@@ -1328,6 +1349,141 @@ def validate_ai_result(ai_result: Dict, projects: List[Dict]) -> Dict:
         "entries": validated_entries,
         "warnings": warnings
     }
+
+
+def verify_task_with_keywords(content: str, ai_task: Dict, projects: List[Dict], project_id: int) -> Optional[Dict]:
+    """
+    用关键词匹配验证AI返回的任务是否最佳匹配
+    
+    返回：更匹配的任务（如果存在），否则返回None
+    """
+    # 获取该项目的所有任务
+    project = next((p for p in projects if p["id"] == project_id), None)
+    if not project:
+        return None
+    
+    tasks = project.get("tasks", [])
+    if not tasks:
+        return None
+    
+    # 关键词匹配
+    matched_task = match_task_by_keywords(content, projects, project_id)
+    
+    if matched_task:
+        # 比较AI任务和关键词匹配任务的得分
+        ai_task_obj = next((t for t in tasks if t["task_id"] == ai_task.get("id")), None)
+        
+        if ai_task_obj:
+            # 计算关键词匹配得分
+            keywords = extract_task_keywords(content)
+            ai_score = calculate_task_match_score(keywords, ai_task_obj["task_name"], content)
+            matched_score = calculate_task_match_score(keywords, matched_task["task_name"], content)
+            
+            # 如果关键词匹配得分明显高于AI匹配，返回关键词匹配结果
+            if matched_score > ai_score * 1.5:  # 阈值：1.5倍
+                return matched_task
+    
+    return None
+
+
+def match_task_by_keywords(content: str, projects: List[Dict], project_id: int) -> Optional[Dict]:
+    """
+    关键词匹配任务
+    
+    返回：{"task_id": "xxx", "task_name": "xxx"} 或 None
+    """
+    project = next((p for p in projects if p["id"] == project_id), None)
+    if not project:
+        return None
+    
+    tasks = project.get("tasks", [])
+    if not tasks:
+        return None
+    
+    # 提取关键词
+    keywords = extract_task_keywords(content)
+    
+    # 计算每个任务的匹配得分
+    scored_tasks = []
+    for task in tasks:
+        score = calculate_task_match_score(keywords, task["task_name"], content)
+        if score > 0:
+            scored_tasks.append((task, score))
+    
+    # 排序并返回最佳匹配
+    scored_tasks.sort(key=lambda x: x[1], reverse=True)
+    
+    if scored_tasks and scored_tasks[0][1] >= 0.5:  # 阈值0.5
+        best_task, best_score = scored_tasks[0]
+        return {"task_id": best_task["task_id"], "task_name": best_task["task_name"]}
+    
+    return None
+
+
+def extract_task_keywords(text: str, top_k: int = 5) -> List[str]:
+    """
+    提取关键词（jieba分词 + 词性过滤）
+    
+    解决向量稀释问题：长查询中非核心词汇干扰核心词汇匹配
+    """
+    try:
+        import jieba.posseg as pseg
+    except ImportError:
+        ai_logger.warning("jieba 未安装，使用简单关键词提取")
+        return [w for w in text if len(w) >= 2][:top_k]
+    
+    # 工程领域停用词
+    stopwords = {
+        "完成", "进行", "工作", "任务", "项目", "工程", "系统",
+        "相关", "等", "及", "和", "的", "了", "在", "到", "对",
+        "开展", "组织", "编写", "整理", "准备", "处理", "跟进",
+        # 地名
+        "德保", "田阳", "隆林", "百色", "南宁"
+    }
+    
+    words = pseg.cut(text)
+    keywords = [
+        word for word, flag in words
+        if (flag.startswith('n') or flag.startswith('v'))  # 名词/动词
+        and len(word) >= 2
+        and word not in stopwords
+    ]
+    
+    return keywords[:top_k]
+
+
+def calculate_task_match_score(keywords: List[str], task_name: str, original_content: str) -> float:
+    """
+    计算匹配分数（加权策略）
+    
+    权重设计：
+    - 关键词命中：+0.5分/词
+    - 关键词在边界（开头/结尾）：+0.3分额外
+    - 原有关键词表匹配：+0.3分
+    - 完全包含：+0.8分
+    """
+    score = 0
+    task_name_lower = task_name.lower()
+    content_lower = original_content.lower()
+    
+    # 权重1：关键词命中
+    for kw in keywords:
+        if kw in task_name_lower:
+            score += 0.5
+            if task_name_lower.startswith(kw) or task_name_lower.endswith(kw):
+                score += 0.3
+    
+    # 权重2：原有关键词表匹配
+    legacy_keywords = ["图纸", "审查", "设计", "招标", "采购", "施工", "勘察", "会议", "协调"]
+    for kw in legacy_keywords:
+        if kw in content_lower and kw in task_name_lower:
+            score += 0.3
+    
+    # 权重3：完全包含
+    if task_name_lower in content_lower:
+        score += 0.8
+    
+    return min(score, 2.0)  # 上限2.0
 
 
 def correct_hours_precision(entries: List[Dict]) -> List[Dict]:
