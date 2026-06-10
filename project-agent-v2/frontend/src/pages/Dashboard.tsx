@@ -1314,11 +1314,15 @@ export default function DashboardPage() {
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>🤖 AI 每日洞察</h3>
             </div>
             <div style={{ padding: '20px' }}>
-              {parseInsight(insight).map((line, i) => (
-                <p key={i} style={{ margin: i === 0 ? 0 : '12px 0 0 0', lineHeight: '1.8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                  {line}
-                </p>
-              ))}
+              {insight.includes('<table') || insight.includes('<style>') || insight.startsWith('<div') ? (
+                <div dangerouslySetInnerHTML={{ __html: insight }} />
+              ) : (
+                parseInsight(insight).map((line, i) => (
+                  <p key={i} style={{ margin: i === 0 ? 0 : '12px 0 0 0', lineHeight: '1.8', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {line}
+                  </p>
+                ))
+              )}
             </div>
           </div>
         )}

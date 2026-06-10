@@ -23,26 +23,17 @@ app = FastAPI(title="Daily Parser API")
 # Ollama API 地址
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 
-# 初始化ChromaDB（使用bge-m3 embedding）
+# 初始化ChromaDB
 try:
-    from chromadb.utils import embedding_functions
-    
-    # 创建bge-m3 embedding函数
-    embedding_function = embedding_functions.OllamaEmbeddingFunction(
-        url="http://localhost:11434",
-        model_name="bge-m3"
-    )
-    
     client = chromadb.HttpClient(host="127.0.0.1", port=8000, settings=Settings(anonymized_telemetry=False))
-    collection = client.get_collection("projects", embedding_function=embedding_function)
+    collection = client.get_collection("projects")  # 不指定embedding_function
     
-    # 加载所有项目（只加载type='project'的记录）
+    # 加载所有项目
     all_projects = {}
     results = collection.get()
     
     if results and results['metadatas']:
         for meta in results['metadatas']:
-            # 只加载项目，不加载任务
             if meta.get('type') == 'project':
                 pid = meta.get('project_id')
                 if pid:
@@ -52,14 +43,27 @@ try:
                         "leader": meta.get('leader', '')
                     }
     
-    logger.info(f"✓ 加载 {len(all_projects)} 个项目（使用bge-m3 embedding）")
-    if len(all_projects) == 0:
-        logger.warning("未加载到项目数据，使用备用数据源")
+    logger.info(f"✓ 加载 {len(all_projects)} 个项目")
 except Exception as e:
     logger.error(f"ChromaDB失败: {e}")
     collection = None
     all_projects = {}
-    embedding_function = None
+
+# 手动生成embedding（用于query）
+def get_embedding_for_query(text: str) -> list:
+    """使用Ollama bge-m3生成embedding"""
+    import httpx
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.post(
+                "http://127.0.0.1:11434/api/embeddings",
+                json={"model": "bge-m3", "prompt": text}
+            )
+            if response.status_code == 200:
+                return response.json().get("embedding", [])
+    except Exception as e:
+        logger.error(f"生成embedding失败: {e}")
+    return []
 
 # 项目别名映射（逐步补充）
 PROJECT_ALIAS_MAP = {
@@ -73,6 +77,10 @@ PROJECT_ALIAS_MAP = {
     "隆林铝厂空压机": "隆林铝厂空压机集中控制项目研究",
     "田林铝厂空压机": "田林铝厂空压机集中控制项目研究",
     "田阳铝厂空压机": "田阳铝厂空压机集中控制项目研究",
+    # 田林铝厂中频炉项目（项目38新名称）
+    "田林铝厂阳极组装中频炉": "田林铝厂阳极组装中频炉三电四炉循环水监控系统",
+    "田林铝厂中频炉": "田林铝厂阳极组装中频炉三电四炉循环水监控系统",
+    "三电四炉": "田林铝厂阳极组装中频炉三电四炉循环水监控系统",
     # 其他项目别名
     "隆林铝厂净化系统": "隆林铝厂净化系统自动化控制项目",
     "净化系统自动化": "隆林铝厂净化系统自动化控制项目",
@@ -298,7 +306,9 @@ def match_project_and_task(project_hint: str, full_content: str = "", report_dat
     # RAG匹配（只有未通过别名匹配时才执行）
     if result["project_id"] is None and collection:
         try:
-            results = collection.query(query_texts=[project_hint], n_results=5)
+            query_emb = get_embedding_for_query(project_hint)
+            if query_emb:
+                results = collection.query(query_embeddings=[query_emb], n_results=5)
             if results and results['distances'] and results['distances'][0]:
                 for i, distance in enumerate(results['distances'][0]):
                     similarity = 1 - distance
@@ -346,8 +356,10 @@ def match_project_and_task(project_hint: str, full_content: str = "", report_dat
         try:
             # 只在该项目的任务中搜索
             logger.info(f"[任务匹配开始] 在项目{result['project_id']}中搜索任务")
-            task_results = collection.query(
-                query_texts=[full_content],
+            query_emb = get_embedding_for_query(full_content)
+            if query_emb:
+                task_results = collection.query(
+                    query_embeddings=[query_emb],
                 where={"$and": [{"project_id": result["project_id"]}, {"type": "task"}]},
                 n_results=15  # 增加候选数量，便于月份过滤
             )
@@ -563,7 +575,7 @@ async def parse_daily(request: ParseRequest):
                 })
                 seen_ids.add(match_result["project_id"])
         
-        duration = int((asyncio.get_event_loop().time() - start_time) * 1000)
+        duration = int((asyncio.get_event_loop().time() - request_start_time) * 1000)
         return ParseResponse(success=True, entries=[ParsedEntry(**e) for e in final_entries], matched_projects=matched_projects, duration_ms=duration, model_used="qwen2.5:14b", match_method="llm_14b")
     
     except Exception as e:
@@ -772,8 +784,10 @@ async def parse_daily_fast(request: ParseRequest):
                 # 尝试在该项目中匹配任务
                 if collection:
                     try:
-                        task_results = collection.query(
-                            query_texts=[overtime_content],
+                        query_emb = get_embedding_for_query(overtime_content)
+                        if query_emb:
+                            task_results = collection.query(
+                                query_embeddings=[query_emb],
                             where={"$and": [{"project_id": pid}, {"type": "task"}]},
                             n_results=5
                         )
@@ -840,7 +854,7 @@ async def parse_daily_fast(request: ParseRequest):
             })
             seen_ids.add(pid)
     
-    duration = int((asyncio.get_event_loop().time() - start_time) * 1000)
+    duration = int((asyncio.get_event_loop().time() - request_start_time) * 1000)
     return ParseResponse(success=True, entries=[ParsedEntry(**e) for e in final_entries], matched_projects=matched_projects, duration_ms=duration, model_used="qwen2.5:7b", match_method="regex_7b")
 
 
@@ -957,4 +971,4 @@ def verify_task_with_keywords(content: str, candidates: List[Dict]) -> Optional[
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8003)
+    uvicorn.run(app, host="0.0.0.0", port=8003)# 修复版本: 2026-06-10 15:02 - 全部修复完成

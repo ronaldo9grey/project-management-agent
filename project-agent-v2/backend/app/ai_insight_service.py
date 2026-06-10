@@ -32,23 +32,40 @@ async def polish_insight_with_local_model(raw_insight: str, period: str = "morni
 
 分析要求：
 1. ⚠️ 必须保留"分析范围"部分，说明本次只分析已上传计划的项目
-2. **深度解读**：
-   - 从数据中发现潜在问题（如：进度与成本的关系、延期风险传导）
-   - 预判下一步可能出现的风险
-   - 提出具体可执行的行动建议
+2. **深度解读**（这是核心要求）：
+   - 分析每个项目的进度状态（谁快谁慢，为什么）
+   - 延期任务的**影响分析**：是否在关键路径？会传导到哪些后续任务？
+   - 进度与时间的匹配度：按时间计划，应该完成多少？实际完成多少？偏差多少？
+   - 各项目进度对比：为什么有的项目快（如隆林空压机61%），有的慢（如德保空压机23%）？原因分析
+   - 任务完成率分析：哪个项目任务完成率高？哪个低？
 3. **数据缺失提醒**：如果发现数据异常（如成本为0、进度异常），明确提醒用户更新
-4. 保持数据准确，不修改数字
-5. 语言简洁专业，用emoji增强可读性
-6. 开头用"{time_context}！"问候（不超过10个字），⚠️ 只输出一次问候
-7. 风格：{time_style}
-8. 总长度控制在400字以内
-9. ⚠️ 不要重复输出内容，每个部分只输出一次
+4. **趋势预判**：
+   - 当前进度趋势下，预计何时完成？
+   - 延期风险是否在扩大？
+   - 哪个项目可能成为下一个延期项目？
+5. **行动建议**（具体可执行）：
+   - 针对每个项目给出具体建议（而非笼统的"加快进度"）
+   - 优先级排序：哪个项目最需要关注？为什么？
+6. 保持数据准确，不修改数字
+7. 语言简洁专业，用emoji增强可读性
+8. 开头用"{time_context}！"问候（不超过10个字），⚠️ 只输出一次问候
+9. 风格：{time_style}
+10. 总长度控制在600字以内
+11. ⚠️ 不要重复输出内容，每个部分只输出一次
+12. ⚠️ 重点：**深度解读部分必须占全文50%以上**
 
-输出格式：直接输出分析后的内容，不要有任何解释或标记。
+输出格式：
+📋【分析范围】...
+📊【深度解读】（核心部分，必须详细）
+   - 项目进度对比分析
+   - 延期影响分析
+   - 进度偏差分析
+   - 趋势预判
+💰【成本数据】...
+💡【行动建议】（具体项目具体建议）
 
 示例（供参考深度分析方向）：
-原始："进度36.8%，无延期"
-分析："进度平稳但需关注：1) 若持续低速推进可能导致后期赶工；2) 建议本周检查关键路径任务资源是否充足"
+"隆林空压机61%领先，因前期立项流程顺利；德保空压机23%滞后，因电气图纸设计仅60%。若持续此进度，德保项目需额外15天赶工，建议本周追加设计师资源..."
 """
 
     user_prompt = f"请润色以下项目洞察：\n\n{raw_insight}"
@@ -154,7 +171,56 @@ def generate_raw_insight() -> str:
             ORDER BY upload_time DESC
         """)).fetchall()
         
-        tracked_count = len(tracked_projects)
+        # 获取项目时间进度对比
+        time_progress_data = conn.execute(text("""
+            SELECT 
+                p.id,
+                p.name,
+                p.progress as actual_progress,
+                CASE 
+                    WHEN p.end_date IS NULL OR p.start_date IS NULL THEN NULL
+                    ELSE ROUND(
+                        (CURRENT_DATE - p.start_date)::numeric / 
+                        NULLIF((p.end_date - p.start_date), 0) * 100, 1
+                    )
+                END as time_progress,
+                p.leader
+            FROM projects p
+            JOIN project_plan_versions ppv ON p.id = ppv.project_id
+            WHERE ppv.upload_time >= '2026-04-01' 
+            AND ppv.upload_by = 'admin'
+            AND p.is_deleted = false
+            ORDER BY p.progress DESC
+        """)).fetchall()
+        
+        # 分析进度状态（基于时间进度对比）
+        progress_analysis = []
+        for row in time_progress_data:
+            pid, name, actual, time_prog, leader = row
+            if time_prog is None:
+                status = "无法判断"
+                reason = "无结束日期"
+            else:
+                diff = actual - time_prog
+                if diff >= 10:
+                    status = "领先"
+                    reason = f"进度{actual}%，超时间进度{diff:.1f}%"
+                elif diff >= -10:
+                    status = "正常"
+                    reason = f"进度{actual}%，时间进度{time_prog:.1f}%"
+                else:
+                    status = "滞后"
+                    reason = f"进度{actual}%，时间进度{time_prog:.1f}%，落后{-diff:.1f}%"
+            
+            progress_analysis.append({
+                "id": pid,
+                "name": name,
+                "actual_progress": actual,
+                "time_progress": time_prog,
+                "leader": leader,
+                "status": status,
+                "reason": reason
+            })
         tracked_ids = [p[0] for p in tracked_projects]
         
         # 其他项目数（无任务数据或采用标准化模板）
@@ -426,14 +492,14 @@ def generate_raw_insight() -> str:
 
 async def generate_ai_insight_with_polish(period: str = "morning") -> Dict[str, Any]:
     """
-    生成洞察并润色
+    生成洞察（直接生成，不调用本地模型）
     
     参数：
     - period: "morning" 或 "noon"
     
     返回：{
         "raw": "原始洞察",
-        "polished": "润色后洞察",
+        "polished": "HTML格式洞察",
         "period": "morning/noon",
         "generated_at": "生成时间"
     }
@@ -444,8 +510,8 @@ async def generate_ai_insight_with_polish(period: str = "morning") -> Dict[str, 
     raw_insight = generate_raw_insight()
     logger.info(f"[AI洞察] 规则生成完成，长度: {len(raw_insight)}")
     
-    # 2. 本地模型润色
-    polished_insight = await polish_insight_with_local_model(raw_insight, period)
+    # 2. 直接返回，不调用模型（效率更高）
+    polished_insight = raw_insight
     
     return {
         "raw": raw_insight,

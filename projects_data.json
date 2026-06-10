@@ -1,0 +1,4654 @@
+[
+  {
+    "id": 12,
+    "name": "600KA槽上部烟气治理的技术研究",
+    "leader": "薛闯",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "12_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "12_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 13,
+    "name": "电解锰阴极板复合技术的研究及产业化",
+    "leader": "张迪",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "13_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "13_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 14,
+    "name": "一种新型电解铝多功能天车抓斗结构的设计及产业化",
+    "leader": "李唯",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "14_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "14_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 15,
+    "name": "田阳铝厂一分厂脱硫浆液循环泵节能研发项目",
+    "leader": "顾锦荣",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "15_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "15_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 16,
+    "name": "田林铝厂全厂电机节能改造",
+    "leader": "何宾",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "16_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "16_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 17,
+    "name": "德保铝厂全厂电机节能改造",
+    "leader": "何宾",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "17_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "17_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 18,
+    "name": "隆林铝厂除尘器布袋脉冲精准控制研究",
+    "leader": "何宾",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "18_1_5_V1",
+        "task_name": "1.5 EPC合同签订、盖章",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_1_V1",
+        "task_name": "1.项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "18_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "18_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 19,
+    "name": "田林铝厂供电整流PLC控制系统稳定性研发项目",
+    "leader": "陆宏东",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "19_1_1_V2",
+        "task_name": "1.1 方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_1_2_V2",
+        "task_name": "1.2 项目立项审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_1_3_V2",
+        "task_name": "1.3 项目需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_1_4_V2",
+        "task_name": "1.4 项目定价",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_1_5_V2",
+        "task_name": "1.5 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_1_V2",
+        "task_name": "1.项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "19_2_1_V2",
+        "task_name": "2.1 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_2_2_V2",
+        "task_name": "2.2 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_2_3_V2",
+        "task_name": "2.3 单一来源邀标",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_2_4_V2",
+        "task_name": "2.4 开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_2_5_V2",
+        "task_name": "2.5 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_2_6_V2",
+        "task_name": "2.6 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_2_V2",
+        "task_name": "2.项目推进（招投标）",
+        "task_level": 1
+      },
+      {
+        "task_id": "19_3_1_V2",
+        "task_name": "3.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_3_2_V2",
+        "task_name": "3.2 设备到货",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_3_3_V2",
+        "task_name": "3.3 安装调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_3_4_V2",
+        "task_name": "3.4 交付试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "19_3_V2",
+        "task_name": "3.项目实施（安装调试）",
+        "task_level": 1
+      },
+      {
+        "task_id": "19_4_V2",
+        "task_name": "4.项目验收",
+        "task_level": 1
+      },
+      {
+        "task_id": "19_5_V2",
+        "task_name": "5.项目评估",
+        "task_level": 1
+      }
+    ]
+  },
+  {
+    "id": 20,
+    "name": "隆林铝厂空压机集中控制项目研究",
+    "leader": "周贵平",
+    "status": "进行中",
+    "progress": 61.0,
+    "tasks": [
+      {
+        "task_id": "20_1_1_V4",
+        "task_name": "1.1 项目调研",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_1_2_V4",
+        "task_name": "1.2 方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_1_3_1_V4",
+        "task_name": "1.3.1 立项评审会",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_3_2_V4",
+        "task_name": "1.3.2 OA立项申请流程",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_3_V4",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_1_4_V4",
+        "task_name": "1.4 内部需求流程(研究院)",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_1_5_V4",
+        "task_name": "1.5 项目定价",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_1_6_1_V4",
+        "task_name": "1.6.1 编写项目技术协议",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_6_2_V4",
+        "task_name": "1.6.2 编写EPC合同",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_6_3_V4",
+        "task_name": "1.6.3 法务审核EPC合同",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_6_4_V4",
+        "task_name": "1.6.4 EPC审批流程",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_6_5_V4",
+        "task_name": "1.6.5 EPC合同签订、盖章",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_1_6_V4",
+        "task_name": "1.6 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_1_V4",
+        "task_name": "1.项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "20_2_1_1_V4",
+        "task_name": "2.1.1 电气图纸设计",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_1_2_V4",
+        "task_name": "2.1.2 电气图纸审查",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_1_V4",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_2_2_1_V4",
+        "task_name": "2.2.1 技术规范书编制",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_2_2_V4",
+        "task_name": "2.2.2 技术规范书审核/完善",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_2_V4",
+        "task_name": "2.2 技术规范书",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_2_3_1_V4",
+        "task_name": "2.3.1 招标需求审批",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_3_2_V4",
+        "task_name": "2.3.2 招标启动",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_3_3_V4",
+        "task_name": "2.3.3 招标公告",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_3_4_V4",
+        "task_name": "2.3.4 招标资格审查",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_2_3_V4",
+        "task_name": "2.3 招标",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_2_4_V4",
+        "task_name": "2.4 开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_2_5_V4",
+        "task_name": "2.5 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_2_6_V4",
+        "task_name": "2.6 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_2_V4",
+        "task_name": "2.项目推进",
+        "task_level": 1
+      },
+      {
+        "task_id": "20_3_1_1_V4",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_3_1_2_V4",
+        "task_name": "3.1.2 设备备货、运输",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_3_1_3_V4",
+        "task_name": "3.1.3 设备到货验收",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_3_1_V4",
+        "task_name": "3.1 设备到货",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_3_2_1_V4",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_3_2_2_V4",
+        "task_name": "3.2.2 施工进场、线缆敷设",
+        "task_level": 3
+      },
+      {
+        "task_id": "20_3_2_V4",
+        "task_name": "3.2 前期施工",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_3_3_V4",
+        "task_name": "3.3 安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_3_4_V4",
+        "task_name": "3.4 调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_3_5_V4",
+        "task_name": "3.5 试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_3_V4",
+        "task_name": "3.项目实施",
+        "task_level": 1
+      },
+      {
+        "task_id": "20_4_1_V4",
+        "task_name": "4.1 项目验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_4_2_V4",
+        "task_name": "4.2 项目评估",
+        "task_level": 2
+      },
+      {
+        "task_id": "20_4_V4",
+        "task_name": "4.项目评估",
+        "task_level": 1
+      }
+    ]
+  },
+  {
+    "id": 21,
+    "name": "田阳铝厂空压机集中控制项目研究",
+    "leader": "周贵平",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "21_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "21_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 22,
+    "name": "德保铝厂空压机集中控制项目研究",
+    "leader": "周贵平",
+    "status": "进行中",
+    "progress": 23.0,
+    "tasks": [
+      {
+        "task_id": "P22V47T10",
+        "task_name": "过程7：内部需求流程(研究院)",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T11",
+        "task_name": "过程8：编写EPC合同",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T12",
+        "task_name": "过程9：法务审核EPC合同",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T13",
+        "task_name": "过程10：EPC审批流程",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T14",
+        "task_name": "过程11：EPC合同签订、盖章",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T15",
+        "task_name": "结果2：完成项目推进（招投标）",
+        "task_level": 1
+      },
+      {
+        "task_id": "P22V47T16",
+        "task_name": "过程1：电气图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T17",
+        "task_name": "过程2：电气图纸审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T18",
+        "task_name": "过程3：技术规范书编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T19",
+        "task_name": "过程4：技术规范书审核/完善",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T20",
+        "task_name": "过程5：招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T21",
+        "task_name": "过程6：招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T22",
+        "task_name": "过程7：招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T23",
+        "task_name": "过程8：招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T24",
+        "task_name": "过程9：开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T25",
+        "task_name": "过程10：中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T26",
+        "task_name": "过程11：采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T27",
+        "task_name": "结果3：完成项目实施（安装调试）",
+        "task_level": 1
+      },
+      {
+        "task_id": "P22V47T28",
+        "task_name": "过程1：设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T29",
+        "task_name": "过程2：设备备货、运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T3",
+        "task_name": "结果1：完成项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "P22V47T30",
+        "task_name": "过程3：设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T31",
+        "task_name": "过程4：安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T32",
+        "task_name": "过程5：施工进场、线缆敷设",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T33",
+        "task_name": "过程6：安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T34",
+        "task_name": "过程7：调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T35",
+        "task_name": "过程8：试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T36",
+        "task_name": "结果4：项目验收",
+        "task_level": 1
+      },
+      {
+        "task_id": "P22V47T37",
+        "task_name": "过程1：项目验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T38",
+        "task_name": "结果5：项目评估",
+        "task_level": 1
+      },
+      {
+        "task_id": "P22V47T39",
+        "task_name": "过程1：项目评估",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T4",
+        "task_name": "过程1：项目调研",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T5",
+        "task_name": "过程2：方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T6",
+        "task_name": "过程3：立项评审会",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T7",
+        "task_name": "过程4：OA立项申请流程",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T8",
+        "task_name": "过程5：项目定价",
+        "task_level": 2
+      },
+      {
+        "task_id": "P22V47T9",
+        "task_name": "过程6：编写项目技术协议",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 23,
+    "name": "田林铝厂空压机集中控制项目研究",
+    "leader": "周贵平",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "23_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "23_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 24,
+    "name": "隆林铝厂整流系统总调PLC升级改造项目",
+    "leader": "陆宏东",
+    "status": "进行中",
+    "progress": 29.0,
+    "tasks": [
+      {
+        "task_id": "P24V42T10",
+        "task_name": "过程1：招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T11",
+        "task_name": "过程2：技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T12",
+        "task_name": "过程3：单一来源邀标",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T13",
+        "task_name": "过程4：开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T14",
+        "task_name": "过程5：中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T15",
+        "task_name": "过程6：采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T16",
+        "task_name": "结果3：完成项目实施（安装调试）",
+        "task_level": 1
+      },
+      {
+        "task_id": "P24V42T17",
+        "task_name": "过程1：图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T18",
+        "task_name": "过程2：设备到货",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T19",
+        "task_name": "过程3：安装调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T20",
+        "task_name": "过程4：交付试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T21",
+        "task_name": "结果4：项目验收",
+        "task_level": 1
+      },
+      {
+        "task_id": "P24V42T22",
+        "task_name": "结果5：项目评估",
+        "task_level": 1
+      },
+      {
+        "task_id": "P24V42T3",
+        "task_name": "结果1：完成项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "P24V42T4",
+        "task_name": "过程1：方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T5",
+        "task_name": "过程2：项目立项审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T6",
+        "task_name": "过程3：项目需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T7",
+        "task_name": "过程4：项目定价",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T8",
+        "task_name": "过程5：EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "P24V42T9",
+        "task_name": "结果2：完成项目推进（招投标）",
+        "task_level": 1
+      }
+    ]
+  },
+  {
+    "id": 25,
+    "name": "田阳铝厂阳极组装新增抓斗料破碎系统",
+    "leader": "李唯",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "25_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "25_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 26,
+    "name": "田阳铝厂阳极组装提质增效项目的技术研究",
+    "leader": "陆宏东",
+    "status": "进行中",
+    "progress": 26.0,
+    "tasks": [
+      {
+        "task_id": "26_1_1_V2",
+        "task_name": "1.1 月度反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_1_2_V2",
+        "task_name": "1.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_1_3_V2",
+        "task_name": "1.3 月度平均组装效率达45组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_1_V2",
+        "task_name": "1. 2026年4月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_2_1_V2",
+        "task_name": "2.1 月度反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_2_2_V2",
+        "task_name": "2.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_2_3_V2",
+        "task_name": "2.3 月度平均组装效率达45组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_2_V2",
+        "task_name": "2. 2026年5月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_3_1_V2",
+        "task_name": "3.1 月度反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_3_2_V2",
+        "task_name": "3.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_3_3_V2",
+        "task_name": "3.3 月度平均组装效率达45组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_3_V2",
+        "task_name": "3. 2026年6月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_4_1_V2",
+        "task_name": "4.1 月度反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_4_2_V2",
+        "task_name": "4.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_4_3_V2",
+        "task_name": "4.3 月度平均组装效率达48组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_4_V2",
+        "task_name": "4. 2026年7月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_5_1_V2",
+        "task_name": "5.1 月度反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_5_2_V2",
+        "task_name": "5.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_5_3_V2",
+        "task_name": "5.3 月度平均组装效率达50组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_5_V2",
+        "task_name": "5. 2026年8月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_6_1_V2",
+        "task_name": "6.1 9月反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_6_2_V2",
+        "task_name": "6.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_6_3_V2",
+        "task_name": "6.3 9月平均组装效率达50组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_6_4_V2",
+        "task_name": "6.4 完成项目第二阶段验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_6_V2",
+        "task_name": "6. 2026年9月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_7_1_V2",
+        "task_name": "7.1 10月反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_7_2_V2",
+        "task_name": "7.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_7_3_V2",
+        "task_name": "7.3 10月度平均组装效率达55组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_7_V2",
+        "task_name": "7. 2026年10月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_8_1_V2",
+        "task_name": "8.1 11月反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_8_2_V2",
+        "task_name": "8.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_8_3_V2",
+        "task_name": "8.3 11月度平均组装效率达55组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_8_V2",
+        "task_name": "8. 2026年11月技术服务",
+        "task_level": 1
+      },
+      {
+        "task_id": "26_9_1_V2",
+        "task_name": "9.1 12月反馈会",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_9_2_V2",
+        "task_name": "9.2 会议纪要",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_9_3_V2",
+        "task_name": "9.3 月度平均组装效率达60组/小时",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_9_4_V2",
+        "task_name": "9.4 完成第三阶段验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "26_9_V2",
+        "task_name": "9. 2026年12月技术服务",
+        "task_level": 1
+      }
+    ]
+  },
+  {
+    "id": 27,
+    "name": "隆林铝厂阳极组装提质增效项目的技术研究",
+    "leader": "陆宏东",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "27_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "27_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 28,
+    "name": "田阳铝厂科研课题项目技术服务",
+    "leader": "冯恩浪",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "28_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "28_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 29,
+    "name": "田林铝厂科研课题项目技术服务",
+    "leader": "冯恩浪",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "29_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "29_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 30,
+    "name": "隆林铝厂科研课题项目技术服务",
+    "leader": "冯恩浪",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "30_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "30_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 31,
+    "name": "百矿发电科研课题项目技术服务",
+    "leader": "冯恩浪",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "31_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "31_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 32,
+    "name": "铝电解碳渣低温氧化处理技术",
+    "leader": "刘川",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "32_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "32_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 33,
+    "name": "电解锰渣无害化处理项目",
+    "leader": "廖英祥",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "33_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "33_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 34,
+    "name": "落地锰转化锰锭项目",
+    "leader": "张钢",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "34_1_1_1_项目方案及概算_V1",
+        "task_name": "1.1 项目方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_1_1_2_方案评审_V1",
+        "task_name": "1.2 方案评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_1_1_3_项目立项_V1",
+        "task_name": "1.3 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_1_1_4_EPC合同签订_V1",
+        "task_name": "1.4 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "34_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 35,
+    "name": "Demo项目-智能计划管理系统",
+    "leader": "admin",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "P35V2T2",
+        "task_name": "需求调研",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T3",
+        "task_name": "系统设计",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T4",
+        "task_name": "数据库设计",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T5",
+        "task_name": "后端开发",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T6",
+        "task_name": "前端开发",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T7",
+        "task_name": "新增-安全模块",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T8",
+        "task_name": "接口联调",
+        "task_level": 1
+      },
+      {
+        "task_id": "P35V2T9",
+        "task_name": "测试",
+        "task_level": 1
+      }
+    ]
+  },
+  {
+    "id": 37,
+    "name": "锰电解槽控制系统研发项目",
+    "leader": "苏积波",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": [
+      {
+        "task_id": "37_2_2_10_采购合同签订_V1",
+        "task_name": "2.10 采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_1_图纸设计_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_2_图纸/预算审查_V1",
+        "task_name": "2.2 图纸/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_3_招标需求审批_V1",
+        "task_name": "2.3 招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_4_招标启动_V1",
+        "task_name": "2.4 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_5_技术任务书审查_V1",
+        "task_name": "2.5 技术任务书审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_6_招标公告_V1",
+        "task_name": "2.6 招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_7_招标资格审查_V1",
+        "task_name": "2.7 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_8_开标评标_V1",
+        "task_name": "2.8 开标评标",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_2_2_9_中标通知书_V1",
+        "task_name": "2.9 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_1_1_设备采购下单_V1",
+        "task_name": "3.1.1 设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_1_2_供应商生产排期_V1",
+        "task_name": "3.1.2 供应商生产排期",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_1_3_设备出厂检验_V1",
+        "task_name": "3.1.3 设备出厂检验",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_1_4_物流运输_V1",
+        "task_name": "3.1.4 物流运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_1_5_设备到货验收_V1",
+        "task_name": "3.1.5 设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_2_1_安装方案编制_V1",
+        "task_name": "3.2.1 安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_2_2_安装队伍进场_V1",
+        "task_name": "3.2.2 安装队伍进场",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_2_3_现场施工准备_V1",
+        "task_name": "3.2.3 现场施工准备",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_3_1_主体设备安装_V1",
+        "task_name": "3.3.1 主体设备安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_3_2_电气系统安装_V1",
+        "task_name": "3.3.2 电气系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_3_3_控制系统安装_V1",
+        "task_name": "3.3.3 控制系统安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_3_4_设备单体调试_V1",
+        "task_name": "3.3.4 设备单体调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_3_5_系统联调_V1",
+        "task_name": "3.3.5 系统联调",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_4_1_空载试运行_V1",
+        "task_name": "3.4.1 空载试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_4_2_带料试运行_V1",
+        "task_name": "3.4.2 带料试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_4_3_性能测试_V1",
+        "task_name": "3.4.3 性能测试",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_4_4_试运行问题整改_V1",
+        "task_name": "3.4.4 试运行问题整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_5_1_内部预验收_V1",
+        "task_name": "3.5.1 内部预验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_5_2_正式验收申请_V1",
+        "task_name": "3.5.2 正式验收申请",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_5_3_验收评审_V1",
+        "task_name": "3.5.3 验收评审",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_5_4_验收整改_V1",
+        "task_name": "3.5.4 验收整改",
+        "task_level": 2
+      },
+      {
+        "task_id": "37_3_3_5_5_项目移交_V1",
+        "task_name": "3.5.5 项目移交",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 38,
+    "name": "田林铝厂阳极组装中频炉三电四炉循环水监控系统",
+    "leader": "周贵平",
+    "status": "进行中",
+    "progress": 20.0,
+    "tasks": [
+      {
+        "task_id": "P38V48T10",
+        "task_name": "过程7：内部需求流程(研究院)",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T11",
+        "task_name": "过程8：编写EPC合同",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T12",
+        "task_name": "过程9：法务审核EPC合同",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T13",
+        "task_name": "过程10：EPC审批流程",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T14",
+        "task_name": "过程11：EPC合同签订、盖章",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T15",
+        "task_name": "结果2：完成项目推进（招投标）",
+        "task_level": 1
+      },
+      {
+        "task_id": "P38V48T16",
+        "task_name": "过程1：电气图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T17",
+        "task_name": "过程2：电气图纸审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T18",
+        "task_name": "过程3：技术规范书编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T19",
+        "task_name": "过程4：技术规范书审核/完善",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T20",
+        "task_name": "过程5：招标需求审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T21",
+        "task_name": "过程6：招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T22",
+        "task_name": "过程7：招标公告",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T23",
+        "task_name": "过程8：招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T24",
+        "task_name": "过程9：开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T25",
+        "task_name": "过程10：中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T26",
+        "task_name": "过程11：采购合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T27",
+        "task_name": "结果3：完成项目实施（安装调试）",
+        "task_level": 1
+      },
+      {
+        "task_id": "P38V48T28",
+        "task_name": "过程1：设备采购下单",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T29",
+        "task_name": "过程2：设备备货、运输",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T3",
+        "task_name": "结果1：完成项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "P38V48T30",
+        "task_name": "过程3：设备到货验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T31",
+        "task_name": "过程4：安装方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T32",
+        "task_name": "过程5：施工进场、线缆敷设",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T33",
+        "task_name": "过程6：安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T34",
+        "task_name": "过程7：调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T35",
+        "task_name": "过程8：试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T36",
+        "task_name": "结果4：项目验收",
+        "task_level": 1
+      },
+      {
+        "task_id": "P38V48T37",
+        "task_name": "过程1：项目验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T38",
+        "task_name": "结果5：项目评估",
+        "task_level": 1
+      },
+      {
+        "task_id": "P38V48T39",
+        "task_name": "过程1：项目评估",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T4",
+        "task_name": "过程1：项目调研",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T5",
+        "task_name": "过程2：方案编制",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T6",
+        "task_name": "过程3：立项评审会",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T7",
+        "task_name": "过程4：OA立项申请流程",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T8",
+        "task_name": "过程5：项目定价",
+        "task_level": 2
+      },
+      {
+        "task_id": "P38V48T9",
+        "task_name": "过程6：编写项目技术协议",
+        "task_level": 2
+      }
+    ]
+  },
+  {
+    "id": 39,
+    "name": "田阳新材料熔炼炉在线监测",
+    "leader": "周贵平",
+    "status": "已完成",
+    "progress": 100.0,
+    "tasks": []
+  },
+  {
+    "id": 40,
+    "name": "隆林铝厂净化系统自动化控制项目",
+    "leader": "何宾",
+    "status": "进行中",
+    "progress": 30.0,
+    "tasks": [
+      {
+        "task_id": "40_1_1_V1",
+        "task_name": "1.1 方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_1_1_V2",
+        "task_name": "过程1：方案及概算",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_1_2_V1",
+        "task_name": "1.2 项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_1_2_V2",
+        "task_name": "过程2：项目立项",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_1_3_V1",
+        "task_name": "1.3 EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_1_3_V2",
+        "task_name": "过程3：EPC合同签订",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_1_V1",
+        "task_name": "1. 完成项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_1_V2",
+        "task_name": "结果1：完成项目前期",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_2_1_V1",
+        "task_name": "2.1 图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_1_V2",
+        "task_name": "过程1：图纸设计",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_2_V1",
+        "task_name": "2.2 招标技术条件审核",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_2_V2",
+        "task_name": "过程2：招标技术条件审核",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_3_V1",
+        "task_name": "2.3 设计图/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_3_V2",
+        "task_name": "过程3：设计图/预算审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_4_V1",
+        "task_name": "2.4 采购计划审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_4_V2",
+        "task_name": "过程4：采购计划审批",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_5_V1",
+        "task_name": "2.5 招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_5_V2",
+        "task_name": "过程5：招标启动",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_6_V1",
+        "task_name": "2.6 招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_6_V2",
+        "task_name": "过程6：招标资格审查",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_7_V1",
+        "task_name": "2.7 开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_7_V2",
+        "task_name": "过程7：开标",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_8_V1",
+        "task_name": "2.8 中标通知书",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_8_V2",
+        "task_name": "过程8：定标",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_2_V1",
+        "task_name": "2. 完成项目推进（招投标）",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_2_V2",
+        "task_name": "结果2：完成项目推进（招投标）",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_3_1_V1",
+        "task_name": "3.1 设备到货",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_1_V2",
+        "task_name": "过程1：设备到货",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_2_V1",
+        "task_name": "3.2 安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_2_V2",
+        "task_name": "过程2：安装",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_3_V1",
+        "task_name": "3.3 调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_3_V2",
+        "task_name": "过程3：调试",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_4_V1",
+        "task_name": "3.4 试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_4_V2",
+        "task_name": "过程4：试运行",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_3_V1",
+        "task_name": "3. 完成项目实施（安装调试）",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_3_V2",
+        "task_name": "结果3：完成项目实施（安装调试）",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_4_1_V1",
+        "task_name": "4.1 工程验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_4_1_V2",
+        "task_name": "过程1：工程验收",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_4_2_V1",
+        "task_name": "4.2 项目后评估",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_4_2_V2",
+        "task_name": "过程2：项目后评估",
+        "task_level": 2
+      },
+      {
+        "task_id": "40_4_V1",
+        "task_name": "4. 项目后期",
+        "task_level": 1
+      },
+      {
+        "task_id": "40_4_V2",
+        "task_name": "结果4：项目后期",
+        "task_level": 1
+      }
+    ]
+  },
+  {
+    "id": 41,
+    "name": "靖锰公司制液车间粗压生产工艺自动化改造",
+    "leader": "苏积波",
+    "status": "已完成",
+    "progress": 100.0,
+    "tasks": []
+  },
+  {
+    "id": 42,
+    "name": "废铝添加项目",
+    "leader": "薛闯",
+    "status": "进行中",
+    "progress": 0.0,
+    "tasks": []
+  }
+]
