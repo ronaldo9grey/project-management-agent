@@ -651,36 +651,112 @@ def match_project_by_name(project_hint: str, projects: List[Dict]) -> Optional[D
         return best_match
     return None
 
+# ============== 任务匹配增强（关键词提取 + 加权匹配） ==============
+
+def extract_keywords(text: str, top_k: int = 5) -> List[str]:
+    """
+    提取关键词（jieba分词 + 词性过滤）
+    
+    解决向量稀释问题：长查询中非核心词汇干扰核心词汇匹配
+    """
+    try:
+        import jieba.posseg as pseg
+    except ImportError:
+        logger.warning("jieba 未安装，使用简单关键词提取")
+        # 降级方案：简单分词
+        return [w for w in text if len(w) >= 2][:top_k]
+    
+    # 工程领域停用词
+    stopwords = {
+        "完成", "进行", "工作", "任务", "项目", "工程", "系统",
+        "相关", "等", "及", "和", "的", "了", "在", "到", "对",
+        "开展", "组织", "编写", "整理", "准备", "处理", "跟进",
+        # 地名（避免地名匹配到任务名）
+        "德保", "田阳", "隆林", "百色", "南宁"
+    }
+    
+    words = pseg.cut(text)
+    keywords = [
+        word for word, flag in words
+        if (flag.startswith('n') or flag.startswith('v'))  # 名词/动词
+        and len(word) >= 2
+        and word not in stopwords
+    ]
+    
+    return keywords[:top_k]
+
+
+def calculate_match_score(keywords: List[str], task_name: str, original_content: str) -> float:
+    """
+    计算匹配分数（加权策略）
+    
+    权重设计：
+    - 关键词命中：+0.5分/词
+    - 关键词在边界（开头/结尾）：+0.3分额外
+    - 原有关键词表匹配：+0.3分
+    """
+    score = 0
+    task_name_lower = task_name.lower()
+    content_lower = original_content.lower()
+    
+    # 权重1：关键词命中（核心改进）
+    for kw in keywords:
+        if kw in task_name_lower:
+            score += 0.5
+            # 边界匹配加分（关键词在任务名开头或结尾）
+            if task_name_lower.startswith(kw) or task_name_lower.endswith(kw):
+                score += 0.3
+    
+    # 权重2：原有关键词表匹配（保持兼容）
+    legacy_keywords = ["图纸", "审查", "设计", "招标", "采购", "施工", "勘察", "会议", "协调"]
+    for kw in legacy_keywords:
+        if kw in content_lower and kw in task_name_lower:
+            score += 0.3
+    
+    # 权重3：完全包含加分
+    if task_name_lower in content_lower:
+        score += 0.8
+    
+    return min(score, 2.0)  # 上限2.0
+
+
 def match_task_by_content(content: str, tasks: List[Dict]) -> Optional[Dict]:
-    """根据工作内容匹配任务"""
+    """
+    根据工作内容匹配任务（增强版：关键词提取 + 加权匹配）
+    
+    解决问题：
+    - 长查询"完成德保铝厂空压机图纸设计"匹配错误
+    - 原因：向量稀释，非核心词汇干扰核心词汇匹配
+    
+    改进方案：
+    - 提取关键词（jieba分词 + 词性过滤）
+    - 加权匹配（关键词命中 + 边界匹配 + 原有逻辑）
+    """
     if not content or not tasks:
         return None
 
-    content_lower = content.lower()
-    keywords = ["图纸", "审查", "设计", "招标", "采购", "施工", "勘察", "会议", "协调"]
-
-    best_match = None
-    best_score = 0
-
+    # 阶段1：关键词提取
+    keywords = extract_keywords(content)
+    logger.debug(f"[任务匹配] 提取关键词: {keywords}")
+    
+    # 阶段2：加权匹配
+    scored_tasks = []
     for task in tasks:
-        task_name = task.get("task_name", "").lower()
-
-        # 关键词匹配
-        score = 0
-        for kw in keywords:
-            if kw in content_lower and kw in task_name:
-                score += 0.3
-
-        # 相似度匹配
-        if task_name in content_lower or content_lower in task_name:
-            score += 0.5
-
-        if score > best_score:
-            best_score = score
-            best_match = task
-
-    if best_score >= 0.3:
-        return best_match
+        task_name = task.get("task_name", "")
+        score = calculate_match_score(keywords, task_name, content)
+        if score > 0:
+            scored_tasks.append((task, score))
+            logger.debug(f"[任务匹配] {task_name}: {score:.2f}")
+    
+    # 阶段3：排序并返回最佳匹配
+    scored_tasks.sort(key=lambda x: x[1], reverse=True)
+    
+    if scored_tasks and scored_tasks[0][1] >= 0.5:  # 阈值0.5（平衡模式）
+        best_task, best_score = scored_tasks[0]
+        logger.info(f"[任务匹配] 匹配成功: '{content[:30]}...' -> {best_task.get('task_name')} (得分: {best_score:.2f})")
+        return best_task
+    
+    logger.debug(f"[任务匹配] 未找到匹配: '{content[:30]}...'")
     return None
 
 # ============== 日报解析（智能版） ==============
