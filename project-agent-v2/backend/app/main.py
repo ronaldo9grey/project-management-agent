@@ -8422,6 +8422,9 @@ async def get_dashboard_projects_api(
                     ORDER BY end_date DESC
                 """), {"pid": str(project_id)}).fetchall()
                 
+                # ⚠️ 判断是否有明确计划（有最新版本任务）
+                has_plan = len(tasks) > 0
+                
                 # 确定项目结束时间：优先用项目 end_date，否则取最后一个任务的结束时间
                 project_start_date = p[5]
                 project_end_date = p[6]
@@ -8526,6 +8529,7 @@ async def get_dashboard_projects_api(
                     "contract_amount": float(p[7] or 0),
                     "budget_total_cost": float(p[8] or 0),
                     "actual_total_cost": float(p[9] or 0),
+                    "has_plan": has_plan,  # 新增：是否有明确计划
                     "tasks": [{
                         "task_id": t[0],
                         "task_name": t[1],
@@ -8549,6 +8553,159 @@ async def get_dashboard_projects_api(
         logger.error(f" {e}")
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
+
+
+@app.get("/agent/api/agent/dashboard/projects-grouped")
+async def get_dashboard_projects_grouped_api(
+    current_user: Dict = Depends(get_current_user)
+):
+    """
+    获取看板项目列表（分组版：有计划的优先）
+    
+    返回：{
+        "with_plan": [...],  # 有明确计划的项目
+        "without_plan": [...],  # 无计划的项目
+        "total": 总数
+    }
+    """
+    try:
+        from .database import get_connection
+        with get_connection() as conn:
+            # 获取所有项目
+            projects = conn.execute(text("""
+                SELECT 
+                    p.id, p.name, p.leader, p.status, p.progress,
+                    p.start_date, p.end_date,
+                    p.contract_amount, p.budget_total_cost, p.actual_total_cost
+                FROM projects p
+                WHERE p.is_deleted = false
+                ORDER BY p.id
+            """)).fetchall()
+            
+            with_plan = []
+            without_plan = []
+            
+            for p in projects:
+                project_id = p[0]
+                
+                # 检查是否有最新版本任务
+                task_count = conn.execute(text("""
+                    SELECT COUNT(*) FROM project_tasks
+                    WHERE project_id = :pid
+                    AND is_latest = true
+                    AND is_deleted = false
+                """), {"pid": str(project_id)}).fetchone()[0]
+                
+                has_plan = task_count > 0
+                
+                # 获取任务数据（用于计算进度）
+                tasks = conn.execute(text("""
+                    SELECT 
+                        task_id, task_name, start_date, end_date, 
+                        actual_end_date, progress, status
+                    FROM project_tasks
+                    WHERE project_id = :pid
+                    AND is_latest = true
+                    AND is_deleted = false
+                    AND end_date IS NOT NULL
+                    AND ("isNode" = false OR "isNode" IS NULL)
+                    ORDER BY end_date DESC
+                """), {"pid": str(project_id)}).fetchall()
+                
+                # 计算项目时间
+                project_start_date = p[5]
+                project_end_date = p[6]
+                
+                if not project_end_date and tasks:
+                    project_end_date = tasks[0][3]
+                
+                if not project_start_date and tasks:
+                    task_starts = [t[2] for t in tasks if t[2]]
+                    if task_starts:
+                        project_start_date = min(task_starts)
+                
+                # 计算计划进度
+                today = datetime.now().date()
+                if project_start_date and project_end_date:
+                    start = datetime.strptime(str(project_start_date), '%Y-%m-%d').date() if isinstance(project_start_date, str) else project_start_date
+                    end = datetime.strptime(str(project_end_date), '%Y-%m-%d').date() if isinstance(project_end_date, str) else project_end_date
+                    
+                    if today <= start:
+                        planned_progress = 0.0
+                    elif today >= end:
+                        planned_progress = 100.0
+                    else:
+                        total_days = (end - start).days
+                        elapsed_days = (today - start).days
+                        planned_progress = round(elapsed_days / total_days * 100, 1) if total_days > 0 else 0
+                else:
+                    planned_progress = 0.0
+                
+                # 计算实际进度
+                if len(tasks) > 0:
+                    total_work_days = 0
+                    completed_work_days = 0
+                    
+                    for t in tasks:
+                        task_start = t[2]
+                        task_end = t[3]
+                        actual_end = t[4]
+                        task_progress = float(t[5] or 0) / 100
+                        
+                        if task_start and task_end:
+                            start_dt = task_start if isinstance(task_start, type(today)) else datetime.strptime(str(task_start), '%Y-%m-%d').date()
+                            end_dt = task_end if isinstance(task_end, type(today)) else datetime.strptime(str(task_end), '%Y-%m-%d').date()
+                            work_days = max((end_dt - start_dt).days + 1, 1)
+                        else:
+                            work_days = 5
+                        
+                        total_work_days += work_days
+                        
+                        if task_progress >= 1.0 or actual_end:
+                            completed_work_days += work_days
+                        elif task_end and task_end < today:
+                            completed_work_days += work_days * min(task_progress, 0.5)
+                        else:
+                            completed_work_days += work_days * task_progress
+                    
+                    actual_progress = round(completed_work_days / total_work_days * 100, 1) if total_work_days > 0 else 0
+                else:
+                    actual_progress = float(p[4] or 0)
+                
+                # 构建项目数据
+                project_data = {
+                    "id": project_id,
+                    "name": p[1],
+                    "leader": p[2],
+                    "status": p[3],
+                    "progress": float(p[4] or 0),
+                    "planned_progress": planned_progress,
+                    "actual_progress": actual_progress,
+                    "start_date": str(project_start_date) if project_start_date else None,
+                    "end_date": str(project_end_date) if project_end_date else None,
+                    "contract_amount": float(p[7] or 0),
+                    "budget_total_cost": float(p[8] or 0),
+                    "actual_total_cost": float(p[9] or 0),
+                    "has_plan": has_plan,
+                    "task_count": task_count
+                }
+                
+                if has_plan:
+                    with_plan.append(project_data)
+                else:
+                    without_plan.append(project_data)
+            
+            return {
+                "with_plan": with_plan,
+                "without_plan": without_plan,
+                "total": len(with_plan) + len(without_plan),
+                "tracked_count": len(with_plan),
+                "untracked_count": len(without_plan)
+            }
+    
+    except Exception as e:
+        logger.error(f" {e}")
         raise HTTPException(status_code=500, detail=f"获取失败: {str(e)}")
 
 

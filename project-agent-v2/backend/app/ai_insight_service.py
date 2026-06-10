@@ -335,10 +335,13 @@ def generate_raw_insight() -> str:
     # 生成洞察内容
     lines = []
     
-    # ========== 分析范围说明 ==========
+    # ========== 分析范围说明（含具体项目名称）==========
     if tracked_count > 0:
-        lines.append(f"📋 【分析范围】本次分析 {tracked_count} 个已上传详细计划的项目（有任务数据）")
-        lines.append(f"   📌 其他 {other_count} 个项目采用标准化模板或暂无计划数据，不在分析范围")
+        lines.append(f"📋 【分析范围】本次聚焦 {tracked_count} 个已上传详细计划的项目：")
+        for i, p in enumerate(tracked_projects, 1):
+            task_info = f"{p[4]}个任务" if p[4] else ""
+            lines.append(f"   {i}. {p[1]}（{task_info}）")
+        lines.append(f"   📌 其余 {other_count} 个项目采用标准化模板或暂无计划数据，不在分析范围")
     else:
         lines.append("📋 【分析范围】暂无项目上传详细计划")
         lines.append("   📌 请上传计划文件以启用智能追踪分析")
