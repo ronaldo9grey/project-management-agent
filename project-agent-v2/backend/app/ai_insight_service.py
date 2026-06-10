@@ -135,17 +135,23 @@ def generate_raw_insight() -> str:
     logger.info("[AI洞察] 开始规则生成")
     
     with get_connection() as conn:
-        # ========== 分析范围说明 ==========
-        # 只统计有实际任务数据的项目（上传了计划且有任务）
+        # ========== 分析范围说明（只统计近期上传的计划）==========
+        # 判断标准：upload_time >= 2026-04-01 且 upload_by = 'admin'（手动上传）
+        # 排除批量初始化的模板（2026-03-24、2026-05-08批量上传）
         tracked_projects = conn.execute(text("""
-            SELECT p.id, p.name, p.status, p.progress, COUNT(pt.task_id) as task_count
+            SELECT 
+                p.id, p.name, p.status, p.progress, 
+                MAX(ppv.upload_time) as upload_time,
+                COUNT(pt.task_id) as task_count
             FROM projects p
             JOIN project_plan_versions ppv ON p.id = ppv.project_id
             JOIN project_tasks pt ON pt.plan_version_id = ppv.id AND pt.is_deleted = false
             WHERE p.is_deleted = false
+            AND ppv.upload_time >= '2026-04-01'
+            AND ppv.upload_by = 'admin'
             GROUP BY p.id, p.name, p.status, p.progress
             HAVING COUNT(pt.task_id) > 0
-            ORDER BY task_count DESC
+            ORDER BY upload_time DESC
         """)).fetchall()
         
         tracked_count = len(tracked_projects)
@@ -335,12 +341,13 @@ def generate_raw_insight() -> str:
     # 生成洞察内容
     lines = []
     
-    # ========== 分析范围说明（含具体项目名称）==========
+    # ========== 分析范围说明（只统计近期上传的计划）==========
     if tracked_count > 0:
         lines.append(f"📋 【分析范围】本次聚焦 {tracked_count} 个已上传详细计划的项目：")
         for i, p in enumerate(tracked_projects, 1):
-            task_info = f"{p[4]}个任务" if p[4] else ""
-            lines.append(f"   {i}. {p[1]}（{task_info}）")
+            task_count = p[5] if len(p) > 5 else p[4]  # 兼容字段位置
+            upload_time = p[4].strftime('%Y-%m-%d') if p[4] else '未知'
+            lines.append(f"   {i}. {p[1]}（{task_count}个任务，上传于{upload_time}）")
         lines.append(f"   📌 其余 {other_count} 个项目采用标准化模板或暂无计划数据，不在分析范围")
     else:
         lines.append("📋 【分析范围】暂无项目上传详细计划")
